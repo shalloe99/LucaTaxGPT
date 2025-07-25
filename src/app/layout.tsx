@@ -1,22 +1,26 @@
-import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
-import './globals.css'
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+import "./globals.css";
 
-const inter = Inter({ subsets: ['latin'] })
+const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'Luca Tax GPT',
-  description: 'AI-powered tax assistance platform',
-}
+  title: "LucaTaxGPT - AI Tax Assistant",
+  description: "Intelligent tax assistance powered by official IRS documents and AI",
+};
 
 export default function RootLayout({
   children,
-}: {
-  children: React.ReactNode
-}) {
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
     <html lang="en">
-      <body className={inter.className}>{children}</body>
+      <body className={inter.className}>
+        <div className="min-h-screen bg-gray-50">
+          {children}
+        </div>
+      </body>
     </html>
-  )
+  );
 } 
