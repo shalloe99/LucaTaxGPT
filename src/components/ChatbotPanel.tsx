@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, FileText, ThumbsUp, ThumbsDown, X, Check, MessageCircle, Copy, Edit2, Save } from 'lucide-react';
+import { Send, Bot, User, FileText, ThumbsUp, ThumbsDown, X, Check, MessageCircle, Copy, Edit2, Save, RotateCcw } from 'lucide-react';
 import ProfilePanel from './ProfilePanel';
 import ContextFilters from './ContextFilters';
+import ModelSelector from './ModelSelector';
 import { Chat } from '../types/Conversation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -44,6 +45,8 @@ interface ChatbotPanelProps {
   userProfile?: UserProfile | null;
   updateChatTitle?: (chatId: string, newTitle: string) => void;
   onChatContextUpdate?: (updated: Chat & { contextFilters?: any }) => void;
+  pendingNewChat?: boolean;
+  onCreateChatWithMessage?: (msg: string, modelType: 'chatgpt' | 'ollama', model: string) => void;
 }
 
 interface FeedbackState {
@@ -143,7 +146,7 @@ export default function ChatbotPanel({
   onChatContextUpdate,
   pendingNewChat = false,
   onCreateChatWithMessage
-}: ChatbotPanelProps & { pendingNewChat?: boolean, onCreateChatWithMessage?: (msg: string) => void }) {
+}: ChatbotPanelProps & { pendingNewChat?: boolean, onCreateChatWithMessage?: (msg: string, modelType: 'chatgpt' | 'ollama', model: string) => void }) {
   // All hooks at the top
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
@@ -162,11 +165,131 @@ export default function ChatbotPanel({
   const [editInput, setEditInput] = useState('');
   const editTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [domainKnowledge, setDomainKnowledgeState] = useState(() => getInitialDomainKnowledge(currentChat));
+  const [selectedModelType, setSelectedModelType] = useState<'chatgpt' | 'ollama'>('chatgpt');
+  const [selectedModel, setSelectedModel] = useState<string>('gpt-4o-mini');
+  const [showReloadModelSelector, setShowReloadModelSelector] = useState<string | null>(null);
+  const [reloadingMessageId, setReloadingMessageId] = useState<string | null>(null);
+  const [modelsLoaded, setModelsLoaded] = useState(false);
+
+  // Initialize models on first load
+  useEffect(() => {
+    if (!modelsLoaded) {
+      initializeModels();
+    }
+  }, [modelsLoaded]);
+
+  // Function to initialize models and set default
+  const initializeModels = async () => {
+    try {
+      const response = await fetch('/api/chat/models');
+      if (response.ok) {
+        const data = await response.json();
+        
+        // Set default model if available
+        if (data.defaultModel) {
+          setSelectedModelType(data.defaultModel.modelType);
+          setSelectedModel(data.defaultModel.model);
+          console.log(`🎯 Set default model: ${data.defaultModel.modelType} - ${data.defaultModel.model}`);
+        }
+        
+        setModelsLoaded(true);
+      } else {
+        console.error('Failed to fetch models');
+        setModelsLoaded(true); // Still mark as loaded to avoid infinite retries
+      }
+    } catch (error) {
+      console.error('Error initializing models:', error);
+      setModelsLoaded(true); // Still mark as loaded to avoid infinite retries
+    }
+  };
 
   // Copy to clipboard helper
   const handleCopy = (content: string) => {
     if (typeof window !== 'undefined' && navigator.clipboard) {
       navigator.clipboard.writeText(content);
+    }
+  };
+
+  // Model selection handler
+  const handleModelChange = (modelType: 'chatgpt' | 'ollama', model: string) => {
+    setSelectedModelType(modelType);
+    setSelectedModel(model);
+  };
+
+  // Reload message with different model
+  const handleReloadMessage = async (messageId: string, modelType: 'chatgpt' | 'ollama', model: string) => {
+    if (!currentChat) return;
+    
+    // Find the message to reload
+    const messageIndex = messages.findIndex(m => m.id === messageId);
+    if (messageIndex === -1 || messageIndex === 0) return; // Can't reload first message or if not found
+    
+    // Find the user message that prompted this response
+    const userMessage = messages[messageIndex - 1];
+    if (userMessage.role !== 'user') return;
+    
+    setReloadingMessageId(messageId);
+    setShowReloadModelSelector(null);
+    
+    try {
+      // Prepare context with user profile information
+      let context = '';
+      if (userProfile) {
+        if (userProfile.context) {
+          context += `User Context: ${userProfile.context}\n`;
+        }
+        if (userProfile.tags && userProfile.tags.length > 0) {
+          context += `User Tags: ${userProfile.tags.join(', ')}\n`;
+        }
+      }
+
+      // Call AI service with new model
+      const response = await fetch(`/api/chat/user/messaging/${currentChat.id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: userMessage.content,
+          context: context,
+          domainKnowledge: {
+            ...domainKnowledge,
+            stateTaxCode: domainKnowledge.stateTaxCodes.join(',')
+          },
+          modelType: modelType,
+          model: model,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        
+        // Update the message with new response
+        const updatedMessages = [...messages];
+        updatedMessages[messageIndex] = {
+          ...updatedMessages[messageIndex],
+          content: data.response,
+          timestamp: new Date(),
+        };
+        
+        setMessages(updatedMessages);
+        
+        // Update backend
+        await fetch(`/api/chat/chats/${currentChat.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages: updatedMessages }),
+        });
+        
+        if (onChatContextUpdate) onChatContextUpdate(currentChat);
+      } else {
+        throw new Error('Failed to get response');
+      }
+    } catch (error) {
+      console.error('Error reloading message:', error);
+      // Optionally show error message
+    } finally {
+      setReloadingMessageId(null);
     }
   };
 
@@ -240,6 +363,8 @@ export default function ChatbotPanel({
             ...domainKnowledge,
             stateTaxCode: domainKnowledge.stateTaxCodes.join(',')
           },
+          modelType: selectedModelType,
+          model: selectedModel,
         }),
       });
       if (response.ok) {
@@ -269,18 +394,22 @@ export default function ChatbotPanel({
     }
   };
 
-  // Show user message actions on hover, hide after short delay
+  // Show user message actions on hover with shorter delay, hide with longer delay
   const handleUserMsgMouseEnter = (msgId: string) => {
     setHoveredMsgId(msgId);
-    setShowUserMsgActions(msgId);
     if (editTimeoutRef.current) clearTimeout(editTimeoutRef.current);
+    // Shorter delay before showing buttons
+    editTimeoutRef.current = setTimeout(() => {
+      setShowUserMsgActions(msgId);
+    }, 200); // 200ms delay before showing
   };
   const handleUserMsgMouseLeave = (msgId: string) => {
     setHoveredMsgId(null);
     if (editTimeoutRef.current) clearTimeout(editTimeoutRef.current);
+    // Shorter delay before hiding buttons
     editTimeoutRef.current = setTimeout(() => {
       setShowUserMsgActions(null);
-    }, 800); // Short duration
+    }, 500); // 0.5 second delay before hiding
   };
 
   // Per-conversation context state
@@ -356,13 +485,18 @@ export default function ChatbotPanel({
   };
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    if (messages.length > 0) {
+      // Set scroll position to bottom without animation
+      messagesEndRef.current?.scrollIntoView();
+    }
+  }, [messages, isClient]);
 
   // Load conversation messages when currentConversation changes
   useEffect(() => {
     if (isClient && currentChat?.messages && currentChat.messages.length > 0) {
       setMessages(currentChat.messages as Message[]);
+      // Set scroll position to bottom after messages are loaded (no animation)
+      setTimeout(() => messagesEndRef.current?.scrollIntoView(), 100);
     } else if (isClient && !currentChat?.messages) {
       // Only set messages to currentConversation?.messages or []
       setMessages([]);
@@ -398,7 +532,7 @@ export default function ChatbotPanel({
         }
       }
 
-      // Use new AI API endpoint
+      // Use new AI API endpoint with model selection
       const response = await fetch(`/api/chat/user/messaging/${currentChat?.id}`, {
         method: 'POST',
         headers: {
@@ -411,6 +545,8 @@ export default function ChatbotPanel({
             ...domainKnowledge,
             stateTaxCode: domainKnowledge.stateTaxCodes.join(',') // Convert array to string for backend compatibility
           },
+          modelType: selectedModelType,
+          model: selectedModel,
         }),
       });
 
@@ -452,10 +588,22 @@ export default function ChatbotPanel({
     }
   };
 
+  // When sending the first message (pendingNewChat), call onCreateChatWithMessage with model info
+  const handleFirstMessage = async () => {
+    if (onCreateChatWithMessage && inputMessage.trim()) {
+      onCreateChatWithMessage(inputMessage, selectedModelType, selectedModel);
+      setInputMessage('');
+    }
+  };
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      sendMessage();
+      if (pendingNewChat) {
+        handleFirstMessage();
+      } else {
+        sendMessage();
+      }
     }
   };
 
@@ -634,10 +782,10 @@ export default function ChatbotPanel({
             onSubmit={e => {
               e.preventDefault();
               if (inputMessage.trim() && !isLoading) {
-                setIsLoading(true);
-                onCreateChatWithMessage?.(inputMessage);
-                setInputMessage('');
-                setIsLoading(false);
+                if (onCreateChatWithMessage) {
+                  onCreateChatWithMessage(inputMessage, selectedModelType, selectedModel);
+                  setInputMessage('');
+                }
               }
             }}
           >
@@ -646,13 +794,12 @@ export default function ChatbotPanel({
               placeholder="Type your question..."
               value={inputMessage}
               onChange={e => setInputMessage(e.target.value)}
-              disabled={isLoading}
               autoFocus
             />
             <button
               type="submit"
               className="mt-4 px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-              disabled={isLoading || !inputMessage.trim()}
+              disabled={!inputMessage.trim()}
             >
               Start Chat
             </button>
@@ -684,29 +831,59 @@ export default function ChatbotPanel({
     );
   }
 
+  // Function to get model display name
+  const getModelDisplayName = () => {
+    if (selectedModelType === 'chatgpt') {
+      switch (selectedModel) {
+        case 'gpt-3.5-turbo':
+          return 'GPT-3.5 Turbo';
+        case 'gpt-4o-mini':
+          return 'GPT-4o Mini';
+        case 'gpt-4o':
+          return 'GPT-4o';
+        default:
+          return selectedModel;
+      }
+    } else {
+      return selectedModel;
+    }
+  };
+
+  // Function to get provider name
+  const getProviderName = () => {
+    return selectedModelType === 'chatgpt' ? 'ChatGPT' : 'Local Model';
+  };
+
   return (
     <div className="flex flex-col h-full bg-white">
       {/* Chat Header */}
       <div className="border-b border-gray-200 p-4">
-        <div className="flex items-center gap-3">
-          <Bot className="h-6 w-6 text-blue-600" />
-          {editingTitle ? (
-            <input
-              value={titleInput}
-              onChange={e => setTitleInput(e.target.value)}
-              onBlur={handleTitleSave}
-              onKeyDown={e => { if (e.key === 'Enter') handleTitleSave(); }}
-              className="text-lg font-semibold text-gray-900 bg-white border-b border-blue-300 focus:outline-none"
-            />
-          ) : (
-            <h2
-              className="text-lg font-semibold text-gray-900 cursor-pointer"
-              onClick={() => setEditingTitle(true)}
-              title="Click to edit title"
-            >
-              {currentChat?.title || 'Tax Assistant'}
-            </h2>
-          )}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Bot className="h-6 w-6 text-blue-600" />
+            {editingTitle ? (
+              <input
+                value={titleInput}
+                onChange={e => setTitleInput(e.target.value)}
+                onBlur={handleTitleSave}
+                onKeyDown={e => { if (e.key === 'Enter') handleTitleSave(); }}
+                className="text-lg font-semibold text-gray-900 bg-white border-b border-blue-300 focus:outline-none"
+              />
+            ) : (
+              <h2
+                className="text-lg font-semibold text-gray-900 cursor-pointer"
+                onClick={() => setEditingTitle(true)}
+                title="Click to edit title"
+              >
+                {currentChat?.title || 'Tax Assistant'}
+              </h2>
+            )}
+          </div>
+          <ModelSelector
+            selectedModelType={selectedModelType}
+            selectedModel={selectedModel}
+            onModelChange={handleModelChange}
+          />
         </div>
         <p className="text-sm text-gray-600 mt-1">Powered by official IRS documents and AI</p>
         {/* Domain Knowledge & Profile Controls */}
@@ -728,16 +905,20 @@ export default function ChatbotPanel({
         <div className="flex-1 flex flex-col items-center justify-center text-center select-none">
           <Bot className="w-16 h-16 text-gray-200 mb-6" />
           <h1 className="text-2xl font-semibold text-gray-800 mb-2">What can I help you with?</h1>
-          <p className="text-gray-500 max-w-md mx-auto">Ask me anything about taxes, IRS documents, or your profile. Start typing below to begin your conversation.</p>
+          <p className="text-gray-500 max-w-md mx-auto mb-4">Ask me anything about taxes, IRS documents, or your profile. Start typing below to begin your conversation.</p>
+          {modelsLoaded && (
+            <div className="flex items-center gap-2 text-sm text-gray-400 bg-gray-50 px-3 py-2 rounded-lg">
+              <Bot className="w-4 h-4" />
+              <span>Powered by {getModelDisplayName()} ({getProviderName()})</span>
+            </div>
+          )}
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 overflow-y-auto p-4 space-y-6">
           {messages.map((message, idx) => (
             <div
               key={message.id}
-              className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              onMouseEnter={message.role === 'user' ? () => handleUserMsgMouseEnter(message.id) : undefined}
-              onMouseLeave={message.role === 'user' ? () => handleUserMsgMouseLeave(message.id) : undefined}
+              className={`flex flex-col ${message.role === 'user' ? 'items-end' : 'items-start'}`}
             >
               <div
                 className={`max-w-[70%] rounded-lg px-4 py-2 relative group ${
@@ -745,6 +926,8 @@ export default function ChatbotPanel({
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-100 text-gray-900'
                 }`}
+                onMouseEnter={message.role === 'user' ? () => handleUserMsgMouseEnter(message.id) : undefined}
+                onMouseLeave={message.role === 'user' ? () => handleUserMsgMouseLeave(message.id) : undefined}
               >
                 <div className="flex items-start space-x-2">
                   {message.role === 'assistant' && (
@@ -807,6 +990,18 @@ export default function ChatbotPanel({
                           >
                             <ThumbsDown className="w-4 h-4 text-red-600" />
                           </button>
+                          <button
+                            className="p-1 rounded hover:bg-green-100 relative group"
+                            onClick={() => setShowReloadModelSelector(showReloadModelSelector === message.id ? null : message.id)}
+                            disabled={reloadingMessageId === message.id}
+                          >
+                            <RotateCcw className={`w-4 h-4 text-green-600 ${reloadingMessageId === message.id ? 'animate-spin' : ''}`} />
+                            {/* Tooltip */}
+                            <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-1 px-2 py-1 bg-black bg-opacity-70 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-20">
+                              Switch model ({selectedModelType === 'chatgpt' ? 'ChatGPT' : 'Ollama'})
+                              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-black border-b-opacity-70"></div>
+                            </div>
+                          </button>
                           {feedback[message.id]?.feedback === 'dislike' && feedback[message.id]?.editReady && (
                             <button
                               className="p-1 rounded hover:bg-yellow-100 bg-yellow-50 ml-1"
@@ -850,11 +1045,97 @@ export default function ChatbotPanel({
                               </div>
                             </div>
                           )}
+                          
+                          {/* Reload Model Selector */}
+                          {showReloadModelSelector === message.id && (
+                            <div className="absolute z-10 bottom-full right-0 bg-white border rounded shadow-lg p-2 w-64 mb-1">
+                              <div className="flex justify-between items-center mb-2">
+                                <span className="text-xs font-semibold text-gray-700">Choose model to regenerate</span>
+                                <button 
+                                  onClick={() => setShowReloadModelSelector(null)} 
+                                  className="text-gray-400 hover:text-gray-700"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                              <div className="space-y-1">
+                                {/* ChatGPT Models */}
+                                <div className="text-xs font-medium text-gray-600 mb-1">ChatGPT Models</div>
+                                <button
+                                  onClick={() => handleReloadMessage(message.id, 'chatgpt', 'gpt-4o')}
+                                  className="w-full text-left px-2 py-1 text-xs hover:bg-blue-50 rounded"
+                                >
+                                  <div className="font-medium">GPT-4o</div>
+                                  <div className="text-gray-500">Most capable GPT-4 model</div>
+                                </button>
+                                <button
+                                  onClick={() => handleReloadMessage(message.id, 'chatgpt', 'gpt-4o-mini')}
+                                  className="w-full text-left px-2 py-1 text-xs hover:bg-blue-50 rounded"
+                                >
+                                  <div className="font-medium">GPT-4o Mini</div>
+                                  <div className="text-gray-500">Faster and more cost-effective</div>
+                                </button>
+                                <button
+                                  onClick={() => handleReloadMessage(message.id, 'chatgpt', 'gpt-3.5-turbo')}
+                                  className="w-full text-left px-2 py-1 text-xs hover:bg-blue-50 rounded"
+                                >
+                                  <div className="font-medium">GPT-3.5 Turbo</div>
+                                  <div className="text-gray-500">Fast and efficient model</div>
+                                </button>
+                                
+                                {/* Ollama Models */}
+                                <div className="text-xs font-medium text-gray-600 mb-1 mt-2">Local Models (Ollama)</div>
+                                <button
+                                  onClick={() => handleReloadMessage(message.id, 'ollama', 'llama3.2:latest')}
+                                  className="w-full text-left px-2 py-1 text-xs hover:bg-blue-50 rounded"
+                                >
+                                  <div className="font-medium">llama3.2:latest</div>
+                                  <div className="text-gray-500">Local model (1.9GB)</div>
+                                </button>
+                                <button
+                                  onClick={() => handleReloadMessage(message.id, 'ollama', 'phi3:3.8b')}
+                                  className="w-full text-left px-2 py-1 text-xs hover:bg-blue-50 rounded"
+                                >
+                                  <div className="font-medium">phi3:3.8b</div>
+                                  <div className="text-gray-500">Local model (2.0GB)</div>
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     ) : (
                       <div className="prose prose-sm text-sm max-w-none relative">
-                        {message.content}
+                        {editingMsgId === message.id ? (
+                          <div className="space-y-2">
+                            <textarea
+                              value={editInput}
+                              onChange={handleEditInputChange}
+                              className="w-full p-2 border rounded text-sm resize-none text-black"
+                              rows={3}
+                              autoFocus
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleEditSave(message)}
+                                className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 flex items-center gap-1"
+                              >
+                                <Save className="w-3 h-3" />
+                                Save
+                              </button>
+                              <button
+                                onClick={() => setEditingMsgId(null)}
+                                className="px-3 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div>{message.content}</div>
+                          </>
+                        )}
                       </div>
                     )}
                     <p className="text-xs text-gray-400 mt-1 text-right">
@@ -863,8 +1144,52 @@ export default function ChatbotPanel({
                   </div>
                 </div>
               </div>
+              
+              {/* User message action buttons - positioned completely outside the blue message */}
+              {message.role === 'user' && (
+                <div className={`flex gap-3 justify-end mt-2 transition-all duration-300 ease-in-out ${
+                  showUserMsgActions === message.id 
+                    ? 'opacity-100 transform translate-y-0' 
+                    : 'opacity-0 transform translate-y-2 pointer-events-none'
+                }`}>
+                  <button
+                    className="p-1 transition-colors duration-200 hover:bg-gray-100 rounded"
+                    title="Copy"
+                    onClick={() => handleCopy(message.content)}
+                  >
+                    <Copy className="w-4 h-4 text-gray-400 hover:text-gray-600" />
+                  </button>
+                  <button
+                    className="p-1 transition-colors duration-200 hover:bg-gray-100 rounded"
+                    title="Edit"
+                    onClick={() => handleEditClick(message)}
+                  >
+                    <Edit2 className="w-4 h-4 text-gray-400 hover:text-gray-600" />
+                  </button>
+                </div>
+              )}
             </div>
           ))}
+          
+          {/* Show pending state if the last message is from user and we're not loading */}
+          {messages.length > 0 && 
+           messages[messages.length - 1].role === 'user' && 
+           !isLoading && (
+            <div className="flex justify-start">
+              <div className="bg-gray-100 rounded-lg px-4 py-2">
+                <div className="flex items-center space-x-2">
+                  <Bot className="h-4 w-4 text-gray-500" />
+                  <div className="flex space-x-1">
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                  </div>
+                  <span className="text-sm text-gray-500">Thinking...</span>
+                </div>
+              </div>
+            </div>
+          )}
+          
           {isLoading && (
             <div className="flex justify-start">
               <div className="bg-gray-100 rounded-lg px-4 py-2">
@@ -898,7 +1223,7 @@ export default function ChatbotPanel({
             />
           </div>
           <button
-            onClick={sendMessage}
+            onClick={pendingNewChat ? handleFirstMessage : sendMessage}
             disabled={!inputMessage.trim() || isLoading}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
