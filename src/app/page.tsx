@@ -101,7 +101,7 @@ export default function Home() {
   };
 
   // Handler for actually creating a chat when user sends first message
-  const handleCreateChatWithMessage = async (message: string) => {
+  const handleCreateChatWithMessage = async (message: string, modelType: 'chatgpt' | 'ollama', model: string) => {
     // Create chat in backend with first user message
     const response = await fetch('http://localhost:5300/api/chat/chats', {
       method: 'POST',
@@ -117,6 +117,7 @@ export default function Home() {
         }],
       }),
     });
+    
     if (response.ok) {
       const newChat = await response.json();
       const userMsg = {
@@ -125,40 +126,15 @@ export default function Home() {
         content: message,
         timestamp: new Date().toISOString(),
       };
-      // Immediately send the message to get a bot response
-      const botResponse = await fetch(`/api/chat/user/messaging/${newChat.id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: message,
-          context: '',
-          domainKnowledge: { federalTaxCode: true, stateTaxCodes: [], profileTags: [] },
-        }),
-      });
-      let botMsg = null;
-      if (botResponse.ok) {
-        const data = await botResponse.json();
-        botMsg = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: data.response,
-          timestamp: new Date().toISOString(),
-          relevantDocs: data.relevantDocs,
-        };
-        // Update chat in backend with bot message
-        await fetch(`/api/chat/chats/${newChat.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: [userMsg, botMsg] }),
-        });
-      }
+      
+      // Create the chat object immediately
       const chat = {
         id: newChat.id,
         title: newChat.title,
-        lastMessage: botMsg ? botMsg.content : message,
+        lastMessage: message,
         timestamp: newChat.updatedAt || newChat.createdAt || new Date().toISOString(),
-        messageCount: botMsg ? 2 : 1,
-        messages: botMsg ? [userMsg, botMsg] : [userMsg],
+        messageCount: 1,
+        messages: [userMsg], // Start with just the user message
         contextFilters: {
           federalTaxCode: typeof newChat.contextFilters?.federalTaxCode === 'boolean' ? newChat.contextFilters.federalTaxCode : true,
           stateTaxCodes: Array.isArray(newChat.contextFilters?.stateTaxCodes) ? newChat.contextFilters.stateTaxCodes : [],
@@ -167,10 +143,61 @@ export default function Home() {
         createdAt: newChat.createdAt || new Date().toISOString(),
         updatedAt: newChat.updatedAt || new Date().toISOString(),
       };
+      
+      // Immediately transition to the regular chat panel
       setChats(prev => [chat, ...prev]);
       setCurrentChat(chat);
       setSelectedChatId(chat.id);
       setPendingNewChat(false);
+      
+      // Now make the API call to get the bot response in the background
+      try {
+        const botResponse = await fetch(`/api/chat/user/messaging/${newChat.id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: message,
+            context: '',
+            domainKnowledge: { federalTaxCode: true, stateTaxCodes: [], profileTags: [] },
+            modelType,
+            model,
+          }),
+        });
+        
+        if (botResponse.ok) {
+          const data = await botResponse.json();
+          const botMsg = {
+            id: (Date.now() + 1).toString(),
+            role: 'assistant',
+            content: data.response,
+            timestamp: new Date().toISOString(),
+            relevantDocs: data.relevantDocs,
+          };
+          
+          // Update the chat with the bot response
+          const updatedChat = {
+            ...chat,
+            lastMessage: botMsg.content,
+            messageCount: 2,
+            messages: [userMsg, botMsg],
+            updatedAt: new Date().toISOString(),
+          };
+          
+          // Update backend with bot message
+          await fetch(`/api/chat/chats/${newChat.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messages: [userMsg, botMsg] }),
+          });
+          
+          // Update the chat in the UI
+          setChats(prev => prev.map(c => c.id === chat.id ? updatedChat : c));
+          setCurrentChat(updatedChat);
+        }
+      } catch (error) {
+        console.error('Error getting bot response:', error);
+        // Optionally show an error message in the chat
+      }
     }
   };
 

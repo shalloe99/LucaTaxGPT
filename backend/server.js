@@ -6,7 +6,13 @@ const rateLimit = require('express-rate-limit');
 const dotenv = require('dotenv');
 
 // Load environment variables
-dotenv.config();
+dotenv.config({ path: './backend/.env' });
+
+// Debug environment variables
+console.log('🔍 Environment check:');
+console.log('  - OPENAI_API_KEY present:', !!process.env.OPENAI_API_KEY);
+console.log('  - OPENAI_API_KEY length:', process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.length : 0);
+console.log('  - NODE_ENV:', process.env.NODE_ENV);
 
 const app = express();
 
@@ -34,9 +40,12 @@ const crawlerRoutes = require('./routes/crawler');
 const adminRoutes = require('./routes/admin');
 const profileRoutes = require('./routes/profile');
 const { bootstrapDemoData } = require('./models/Chat');
+const { initializeServices } = require('./services/aiService');
+
+// Initialize demo data and AI services
 bootstrapDemoData();
 
-// Routes
+// Set up routes
 app.use('/api/chat', chatRoutes);
 app.use('/api/crawler', crawlerRoutes);
 app.use('/api/admin', adminRoutes);
@@ -63,10 +72,27 @@ app.use('*', (req, res) => {
 
 const PORT = process.env.PORT || 5300;
 
-const server = app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+// Initialize AI services before starting the server
+initializeServices().then(success => {
+  if (!success) {
+    console.warn('⚠️ Some AI services may not be available. Check the logs above for details.');
+  }
+  
+  const server = app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  }); 
+  
+  // Increase server timeout to 5 minutes for long LLM calls
+  server.setTimeout(300000); // 300,000 ms = 5 minutes
+}).catch(error => {
+  console.error('❌ Failed to initialize AI services:', error);
+  
+  const server = app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  }); 
+  
+  // Increase server timeout to 5 minutes for long LLM calls
+  server.setTimeout(300000); // 300,000 ms = 5 minutes
 }); 
-
-// Increase server timeout to 5 minutes for long LLM calls
-server.setTimeout(300000); // 300,000 ms = 5 minutes 
