@@ -37,3 +37,8 @@ backend/.env
 # typescript
 *.tsbuildinfo
 next-env.d.ts 
+
+# python
+scrapper/irs_pdfs/
+scrapper/scraper.log
+scrapper/venv/
