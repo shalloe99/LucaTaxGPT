@@ -1,0 +1,132 @@
+2025-07-31 19:51:14,454 - INFO - Starting IRS Forms scraper...
+2025-07-31 19:51:15,293 - INFO - Scraping page 1...
+2025-07-31 19:51:17,078 - INFO - Found 25 forms on page 1
+2025-07-31 19:51:17,079 - INFO - Page 1 complete. Total forms so far: 0
+2025-07-31 19:51:19,080 - INFO - Scraping page 2...
+2025-07-31 19:51:19,178 - INFO - Navigated to page 2
+2025-07-31 19:51:19,211 - INFO - Found 25 forms on page 2
+2025-07-31 19:51:19,211 - INFO - Page 2 complete. Total forms so far: 0
+2025-07-31 19:51:21,213 - INFO - Scraping page 3...
+2025-07-31 19:51:21,250 - INFO - Navigated to page 3
+2025-07-31 19:51:21,288 - INFO - Found 25 forms on page 3
+2025-07-31 19:51:21,289 - INFO - [17] Downloading: i56.pdf
+2025-07-31 19:51:21,539 - INFO - [17] Saved: i56.pdf
+2025-07-31 19:51:24,542 - INFO - [20] Downloading: i172.pdf
+2025-07-31 19:51:24,847 - INFO - [20] Saved: i172.pdf
+2025-07-31 19:51:27,851 - INFO - [24] Downloading: p334.pdf
+2025-07-31 19:51:28,463 - INFO - [24] Saved: p334.pdf
+2025-07-31 19:51:29,465 - INFO - Page 3 complete. Total forms so far: 3
+2025-07-31 19:51:31,466 - INFO - Scraping page 4...
+2025-07-31 19:51:31,524 - INFO - Navigated to page 4
+2025-07-31 19:51:31,562 - INFO - Found 25 forms on page 4
+2025-07-31 19:51:31,562 - INFO - [0] Downloading: p334ko.pdf
+2025-07-31 19:51:31,965 - INFO - [0] Saved: p334ko.pdf
+2025-07-31 19:51:32,967 - INFO - [1] Downloading: p334ru.pdf
+2025-07-31 19:51:33,516 - INFO - [1] Saved: p334ru.pdf
+2025-07-31 19:51:35,518 - INFO - [2] Downloading: p334sp.pdf
+2025-07-31 19:51:36,282 - INFO - [2] Saved: p334sp.pdf
+2025-07-31 19:51:39,287 - INFO - [3] Downloading: p334vie.pdf
+2025-07-31 19:51:39,740 - INFO - [3] Saved: p334vie.pdf
+2025-07-31 19:51:40,741 - INFO - [4] Downloading: p334zhs.pdf
+2025-07-31 19:51:41,177 - INFO - [4] Saved: p334zhs.pdf
+2025-07-31 19:51:43,182 - INFO - [5] Downloading: p334zht.pdf
+2025-07-31 19:51:43,874 - INFO - [5] Saved: p334zht.pdf
+2025-07-31 19:59:24,373 - INFO - Starting IRS Forms scraper...
+2025-07-31 19:59:25,194 - INFO - Scraping page 1...
+2025-07-31 19:59:30,659 - INFO - Found 25 forms on page 1
+2025-07-31 19:59:30,660 - INFO - Page 1 complete. Total forms so far: 0
+2025-07-31 19:59:32,661 - INFO - Scraping page 2...
+2025-07-31 19:59:32,774 - INFO - Navigated to page 2
+2025-07-31 19:59:32,807 - INFO - Found 25 forms on page 2
+2025-07-31 19:59:32,808 - INFO - Page 2 complete. Total forms so far: 0
+2025-07-31 19:59:34,847 - INFO - Scraping page 3...
+2025-07-31 19:59:34,890 - INFO - Navigated to page 3
+2025-07-31 19:59:34,928 - INFO - Found 25 forms on page 3
+2025-07-31 19:59:34,928 - INFO - [17] Downloading: i56.pdf
+2025-07-31 19:59:35,548 - INFO - [17] Saved: i56.pdf
+2025-07-31 19:59:38,551 - INFO - [20] Downloading: i172.pdf
+2025-07-31 19:59:39,361 - INFO - [20] Saved: i172.pdf
+2025-07-31 19:59:42,363 - INFO - [24] Downloading: p334.pdf
+2025-07-31 19:59:43,653 - INFO - [24] Saved: p334.pdf
+2025-07-31 19:59:44,654 - INFO - Page 3 complete. Total forms so far: 3
+2025-07-31 19:59:46,656 - INFO - Scraping page 4...
+2025-07-31 19:59:46,709 - INFO - Navigated to page 4
+2025-07-31 19:59:46,757 - INFO - Found 25 forms on page 4
+2025-07-31 19:59:46,758 - INFO - [21] Downloading: i461.pdf
+2025-07-31 19:59:47,669 - INFO - [21] Saved: i461.pdf
+2025-07-31 19:59:48,672 - INFO - Page 4 complete. Total forms so far: 4
+2025-07-31 19:59:50,673 - INFO - Scraping page 5...
+2025-07-31 19:59:50,695 - INFO - Navigated to page 5
+2025-07-31 19:59:50,730 - INFO - Found 25 forms on page 5
+2025-07-31 19:59:50,732 - INFO - Page 5 complete. Total forms so far: 4
+2025-07-31 19:59:52,733 - INFO - Reached maximum pages limit (5)
+2025-07-31 19:59:52,802 - INFO - Saved metadata for 4 forms to irs_pdfs/metadata.csv
+2025-07-31 19:59:52,809 - INFO - ============================================================
+2025-07-31 19:59:52,809 - INFO - SCRAPING SUMMARY
+2025-07-31 19:59:52,809 - INFO - ============================================================
+2025-07-31 19:59:52,809 - INFO - Total forms found: 125
+2025-07-31 19:59:52,809 - INFO - Important forms found: 4
+2025-07-31 19:59:52,809 - INFO - PDFs downloaded: 4
+2025-07-31 19:59:52,809 - INFO - Metadata saved to: irs_pdfs/metadata.csv
+2025-07-31 19:59:52,809 - INFO - ============================================================
+2025-07-31 19:59:52,809 - INFO - 
+Sample of important forms scraped:
+2025-07-31 19:59:52,809 - INFO - - Instruction 56: Title Instructions for Form 56, Notice Concerning Fiduciary Relationship
+2025-07-31 19:59:52,809 - INFO - - Instruction 172: Title Instructions for Form 172, Net Operating Losses (NOLs) for Individuals, Estates, and Trusts
+2025-07-31 19:59:52,809 - INFO - - Publication 334: Title Tax Guide for Small Business (For Individuals Who Use Schedule C)
+2025-07-31 19:59:52,809 - INFO - - Instruction 461: Title Instructions for Form 461, Limitation on Business Losses
+2025-07-31 20:11:06,475 - INFO - Starting IRS Forms scraper...
+2025-07-31 20:11:07,287 - INFO - Scraping page 1...
+2025-07-31 20:11:37,293 - ERROR - Error during scraping: Timeout 30000ms exceeded.
+2025-07-31 20:11:37,337 - INFO - ============================================================
+2025-07-31 20:11:37,338 - INFO - SCRAPING SUMMARY
+2025-07-31 20:11:37,338 - INFO - ============================================================
+2025-07-31 20:11:37,338 - INFO - Total forms found: 0
+2025-07-31 20:11:37,338 - INFO - Important forms found: 0
+2025-07-31 20:11:37,338 - INFO - PDFs downloaded: 0
+2025-07-31 20:11:37,338 - INFO - Metadata saved to: irs_pdfs/metadata.csv
+2025-07-31 20:11:37,338 - INFO - ============================================================
+2025-07-31 20:12:21,480 - INFO - Starting IRS Forms scraper...
+2025-07-31 20:12:22,292 - INFO - Scraping page 1...
+2025-07-31 20:12:24,447 - INFO - Found 25 forms on page 1
+2025-07-31 20:12:24,448 - INFO - Page 1 complete. Total forms so far: 0
+2025-07-31 20:12:26,454 - INFO - Scraping page 2...
+2025-07-31 20:12:26,561 - INFO - Navigated to page 2
+2025-07-31 20:12:26,591 - INFO - Found 25 forms on page 2
+2025-07-31 20:12:26,592 - INFO - Page 2 complete. Total forms so far: 0
+2025-07-31 20:12:28,594 - INFO - Scraping page 3...
+2025-07-31 20:12:28,630 - INFO - Navigated to page 3
+2025-07-31 20:12:28,668 - INFO - Found 25 forms on page 3
+2025-07-31 20:12:28,669 - INFO - Page 3 complete. Total forms so far: 0
+2025-07-31 20:12:30,672 - INFO - Scraping page 4...
+2025-07-31 20:12:30,707 - INFO - Navigated to page 4
+2025-07-31 20:12:30,744 - INFO - Found 25 forms on page 4
+2025-07-31 20:12:30,745 - INFO - [17] Downloading: i56.pdf
+2025-07-31 20:12:31,038 - INFO - [17] Saved: i56.pdf
+2025-07-31 20:12:34,042 - INFO - [20] Downloading: i172.pdf
+2025-07-31 20:12:34,325 - INFO - [20] Saved: i172.pdf
+2025-07-31 20:12:37,328 - INFO - [24] Downloading: p334.pdf
+2025-07-31 20:12:37,771 - INFO - [24] Saved: p334.pdf
+2025-07-31 20:12:38,772 - INFO - Page 4 complete. Total forms so far: 3
+2025-07-31 20:12:40,774 - INFO - Scraping page 5...
+2025-07-31 20:12:40,823 - INFO - Navigated to page 5
+2025-07-31 20:12:40,858 - INFO - Found 25 forms on page 5
+2025-07-31 20:12:40,859 - INFO - [21] Downloading: i461.pdf
+2025-07-31 20:12:41,211 - INFO - [21] Saved: i461.pdf
+2025-07-31 20:12:42,212 - INFO - Page 5 complete. Total forms so far: 4
+2025-07-31 20:12:44,213 - INFO - Reached maximum pages limit (5)
+2025-07-31 20:12:44,257 - INFO - Saved metadata for 4 forms to irs_pdfs/metadata.csv
+2025-07-31 20:12:44,261 - INFO - ============================================================
+2025-07-31 20:12:44,261 - INFO - SCRAPING SUMMARY
+2025-07-31 20:12:44,261 - INFO - ============================================================
+2025-07-31 20:12:44,261 - INFO - Total forms found: 125
+2025-07-31 20:12:44,261 - INFO - Important forms found: 4
+2025-07-31 20:12:44,261 - INFO - PDFs downloaded: 4
+2025-07-31 20:12:44,261 - INFO - Metadata saved to: irs_pdfs/metadata.csv
+2025-07-31 20:12:44,261 - INFO - ============================================================
+2025-07-31 20:12:44,261 - INFO - 
+Sample of important forms scraped:
+2025-07-31 20:12:44,261 - INFO - - Instruction 56: Title Instructions for Form 56, Notice Concerning Fiduciary Relationship
+2025-07-31 20:12:44,261 - INFO - - Instruction 172: Title Instructions for Form 172, Net Operating Losses (NOLs) for Individuals, Estates, and Trusts
+2025-07-31 20:12:44,261 - INFO - - Publication 334: Title Tax Guide for Small Business (For Individuals Who Use Schedule C)
+2025-07-31 20:12:44,261 - INFO - - Instruction 461: Title Instructions for Form 461, Limitation on Business Losses
