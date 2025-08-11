@@ -30,35 +30,70 @@ export default function ModelSelector({
 }: ModelSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [models, setModels] = useState<AvailableModels>({ chatgpt: [], ollama: [] });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchAvailableModels();
+    // Only fetch on client side to prevent hydration mismatch
+    if (typeof window !== 'undefined') {
+      fetchAvailableModels();
+    }
   }, []);
 
   const fetchAvailableModels = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch('/api/chat/models');
-      if (response.ok) {
-        const data = await response.json();
-        // Handle new API response format
-        if (data.models) {
-          setModels(data.models);
+    const maxRetries = 3;
+    const retryDelay = 2000; // 2 seconds
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        setLoading(true);
+        const response = await fetch('/api/chat/models');
+        
+        if (response.ok) {
+          const data = await response.json();
+          // Handle new API response format
+          if (data.models) {
+            setModels(data.models);
+          } else {
+            // Fallback to old format
+            setModels(data);
+          }
+          setError(null);
+          break; // Success, exit retry loop
+        } else if (response.status === 503) {
+          // Backend is starting up, retry after delay
+          const retryAfter = response.headers.get('Retry-After');
+          const delay = retryAfter ? parseInt(retryAfter) * 1000 : retryDelay;
+          
+          if (attempt < maxRetries) {
+            console.log(`⏳ [ModelSelector] Backend starting up, retrying in ${delay}ms (attempt ${attempt}/${maxRetries})`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          } else {
+            throw new Error('Backend is starting up, please try again in a few seconds');
+          }
         } else {
-          // Fallback to old format
-          setModels(data);
+          throw new Error(`Failed to fetch models: ${response.status} ${response.statusText}`);
         }
-        setError(null);
-      } else {
-        throw new Error('Failed to fetch models');
+      } catch (err) {
+        console.error(`Error fetching models (attempt ${attempt}/${maxRetries}):`, err);
+        
+        if (attempt === maxRetries) {
+          // Final attempt failed
+          if (err instanceof Error && err.message.includes('Backend is starting up')) {
+            setError('Backend is starting up, please try again in a few seconds');
+          } else {
+            setError('Failed to load available models. Please check your connection and try again.');
+          }
+        } else {
+          // Wait before retrying
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+        }
+      } finally {
+        if (attempt === maxRetries) {
+          setLoading(false);
+        }
       }
-    } catch (err) {
-      console.error('Error fetching models:', err);
-      setError('Failed to load available models');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -98,6 +133,7 @@ export default function ModelSelector({
   return (
     <div className={`relative ${className}`}>
       <button
+        data-testid="model-selector"
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-2 px-3 py-2 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
         disabled={loading}

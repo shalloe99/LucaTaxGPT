@@ -1,38 +1,15 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, FileText, ThumbsUp, ThumbsDown, X, Check, MessageCircle, Copy, Edit2, Save, RotateCcw } from 'lucide-react';
-import ProfilePanel from './ProfilePanel';
-import ContextFilters from './ContextFilters';
-import ModelSelector from './ModelSelector';
-import { Chat } from '../types/Conversation';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { ReactElement } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { flushSync } from 'react-dom';
+import { ChatState, Message } from '../types/chat';
+import MessageBubble from '@/components/chat/MessageBubble';
+import ChatInput from '@/components/chat/ChatInput';
+import ChatHeader from '@/components/chat/ChatHeader';
 
 interface DomainKnowledge {
-  federalTaxCode: boolean;
   stateTaxCodes: string[];
   filingEntity: string;
-}
-
-interface Message {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: Date;
-  relevantDocs?: any[];
-}
-
-interface Conversation {
-  id: string;
-  title: string;
-  federalTaxCode: boolean;
-  stateTaxCodes: string[];
-  profileTags: string[];
-  messages: any[];
-  createdAt: string;
-  updatedAt: string;
 }
 
 interface UserProfile {
@@ -41,12 +18,26 @@ interface UserProfile {
 }
 
 interface ChatbotPanelProps {
-  currentChat?: Chat | null;
+  currentChat?: ChatState | null;
   userProfile?: UserProfile | null;
   updateChatTitle?: (chatId: string, newTitle: string) => void;
-  onChatContextUpdate?: (updated: Chat & { contextFilters?: any }) => void;
+  onChatContextUpdate?: (updated: ChatState & { contextFilters?: any }) => void;
   pendingNewChat?: boolean;
   onCreateChatWithMessage?: (msg: string, modelType: 'chatgpt' | 'ollama', model: string) => void;
+  selectedModelType?: 'chatgpt' | 'ollama';
+  selectedModel?: string;
+  onGlobalModelChange?: (modelType: 'chatgpt' | 'ollama', model: string) => void;
+  isHydrated?: boolean;
+  isAsyncMode?: boolean;
+  // ChatInstance methods for proper state management
+  onSendMessage?: (message: string, userProfile?: any) => Promise<boolean>;
+  onCancelRequest?: () => Promise<void>;
+  onReloadMessage?: (messageId: string, modelType: 'chatgpt' | 'ollama', model: string) => Promise<boolean>;
+  onEditMessage?: (messageId: string, newContent: string, userProfile?: any) => Promise<boolean>;
+  onTryAgain?: (assistantMessageId: string, userProfile?: any) => Promise<boolean>;
+  onUpdateModelSettings?: (settings: any) => void;
+  onUpdateContextFilters?: (filters: any) => void;
+  updateStreamingMessage?: (messageId: string, content: string, status?: 'streaming' | 'complete' | 'cancelled' | 'error') => void;
 }
 
 interface FeedbackState {
@@ -59,538 +50,919 @@ interface FeedbackState {
   };
 }
 
-const US_STATES = [
-  'Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 'Colorado', 'Connecticut',
-  'Delaware', 'Florida', 'Georgia', 'Hawaii', 'Idaho', 'Illinois', 'Indiana', 'Iowa',
-  'Kansas', 'Kentucky', 'Louisiana', 'Maine', 'Maryland', 'Massachusetts', 'Michigan',
-  'Minnesota', 'Mississippi', 'Missouri', 'Montana', 'Nebraska', 'Nevada', 'New Hampshire',
-  'New Jersey', 'New Mexico', 'New York', 'North Carolina', 'North Dakota', 'Ohio',
-  'Oklahoma', 'Oregon', 'Pennsylvania', 'Rhode Island', 'South Carolina', 'South Dakota',
-  'Tennessee', 'Texas', 'Utah', 'Vermont', 'Virginia', 'Washington', 'West Virginia',
-  'Wisconsin', 'Wyoming'
-];
-
-function StateAutocomplete({ selectedStates, onChange }: { selectedStates: string[]; onChange: (states: string[]) => void }) {
-  const [input, setInput] = useState('');
-  const [filtered, setFiltered] = useState<string[]>(US_STATES);
-  const [showDropdown, setShowDropdown] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    setFiltered(
-      US_STATES.filter(s => s.toLowerCase().includes(input.toLowerCase()) && !selectedStates.includes(s))
-    );
-  }, [input, selectedStates]);
-
-  function handleSelect(state: string) {
-    onChange([...selectedStates, state]);
-    setInput('');
-    setShowDropdown(false);
-  }
-  function handleRemove(state: string) {
-    onChange(selectedStates.filter(s => s !== state));
-  }
-
-  return (
-    <div className="relative w-48">
-      <div className="flex flex-wrap gap-1 mb-1">
-        {selectedStates.map(s => (
-          <span key={s} className="bg-blue-100 text-blue-800 rounded px-2 py-0.5 text-xs flex items-center">
-            {s}
-            <button onClick={() => handleRemove(s)} className="ml-1 text-blue-600 hover:text-red-600">×</button>
-          </span>
-        ))}
-      </div>
-      <input
-        ref={inputRef}
-        value={input}
-        onChange={e => { setInput(e.target.value); setShowDropdown(true); }}
-        onFocus={() => setShowDropdown(true)}
-        placeholder="Type to search states..."
-        className="w-full px-2 py-1 border rounded text-xs"
-      />
-      {showDropdown && filtered.length > 0 && (
-        <div className="absolute left-0 right-0 bg-white border rounded shadow z-10 max-h-40 overflow-y-auto">
-          {filtered.map(s => (
-            <div key={s} className="px-2 py-1 hover:bg-blue-50 cursor-pointer text-xs" onClick={() => handleSelect(s)}>
-              {s}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+interface ConnectionStatus {
+  healthy: boolean;
+  issues: string[];
+  lastCheck: number;
 }
 
-function getInitialDomainKnowledge(currentChat?: Chat | null) {
-  if (currentChat) {
-    return {
-      federalTaxCode: currentChat.contextFilters?.federalTaxCode ?? true,
-      stateTaxCodes: currentChat.contextFilters?.stateTaxCodes ?? [],
-      profileTags: currentChat.contextFilters?.profileTags ?? [],
-      filingEntity: 'individuals',
-    };
-  }
+//
+
+function getInitialDomainKnowledge(currentChat?: ChatState | null): DomainKnowledge {
   return {
-    federalTaxCode: true,
-    stateTaxCodes: [],
-    profileTags: [],
-    filingEntity: 'individuals',
+    stateTaxCodes: currentChat?.contextFilters?.stateTaxCodes || [],
+    filingEntity: (currentChat?.contextFilters as any)?.filingEntity || 'individuals'
   };
 }
 
 export default function ChatbotPanel({ 
   currentChat, 
-  userProfile,
+  userProfile: propUserProfile,
   updateChatTitle,
   onChatContextUpdate,
   pendingNewChat = false,
-  onCreateChatWithMessage
+  onCreateChatWithMessage,
+  selectedModelType = 'ollama',
+  selectedModel = 'phi3:3.8b',
+  onGlobalModelChange,
+  isHydrated,
+  isAsyncMode = true,
+  // ChatInstance methods
+  onSendMessage,
+  onCancelRequest,
+  onReloadMessage,
+  onEditMessage,
+  onTryAgain,
+  onUpdateModelSettings,
+  onUpdateContextFilters,
+  updateStreamingMessage
 }: ChatbotPanelProps & { pendingNewChat?: boolean, onCreateChatWithMessage?: (msg: string, modelType: 'chatgpt' | 'ollama', model: string) => void }) {
-  // All hooks at the top
-  const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isModelSwitching, setIsModelSwitching] = useState(false);
+  const [justExitedWelcome, setJustExitedWelcome] = useState(false);
+  const [showWelcomeOverlay, setShowWelcomeOverlay] = useState<boolean>(pendingNewChat);
+  const [backendOnline, setBackendOnline] = useState(true);
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>({
+    healthy: true,
+    issues: [],
+    lastCheck: Date.now()
+  });
+  const [domainKnowledge, setDomainKnowledge] = useState<DomainKnowledge>(getInitialDomainKnowledge(currentChat));
+  const [userProfile, setUserProfile] = useState<UserProfile>(propUserProfile || { tags: [], context: '' });
+  const [editingTitle, setEditingTitle] = useState('');
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [feedbackState, setFeedbackState] = useState<FeedbackState>({});
+  const [forceRender, setForceRender] = useState(0);
   const [isClient, setIsClient] = useState(false);
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [editingTitle, setEditingTitle] = useState(false);
-  const [titleInput, setTitleInput] = useState(currentChat?.title || '');
-  const [showProfileDropdown, setShowProfileDropdown] = useState(false);
-  const [showStateDropdown, setShowStateDropdown] = useState(false);
-  const stateDropdownRef = useRef<HTMLDivElement>(null);
-  const [feedback, setFeedback] = useState<FeedbackState>({});
-  const [hoveredMsgId, setHoveredMsgId] = useState<string | null>(null);
-  const [showUserMsgActions, setShowUserMsgActions] = useState<string | null>(null);
-  const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
-  const [editInput, setEditInput] = useState('');
-  const editTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const [domainKnowledge, setDomainKnowledgeState] = useState(() => getInitialDomainKnowledge(currentChat));
-  const [selectedModelType, setSelectedModelType] = useState<'chatgpt' | 'ollama'>('chatgpt');
-  const [selectedModel, setSelectedModel] = useState<string>('gpt-4o-mini');
-  const [showReloadModelSelector, setShowReloadModelSelector] = useState<string | null>(null);
-  const [reloadingMessageId, setReloadingMessageId] = useState<string | null>(null);
-  const [modelsLoaded, setModelsLoaded] = useState(false);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+  const streamingMessageRef = useRef<{ id: string; content: string } | null>(null);
+  const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [isUserNearBottom, setIsUserNearBottom] = useState(true);
+  const isUserNearBottomRef = useRef(true);
+  
+  // Use messages directly from currentChat (single source of truth)
+  const messages = currentChat?.messages || [];
+  const displayMessages = messages;
 
-  // Initialize models on first load
+  // Force re-render effect for streaming updates
   useEffect(() => {
-    if (!modelsLoaded) {
-      initializeModels();
-    }
-  }, [modelsLoaded]);
+    // This effect intentionally empty - just triggers re-render when forceRender changes
+    // This ensures UI updates immediately during streaming instead of waiting for tab switches
+  }, [forceRender]);
 
-  // Function to initialize models and set default
-  const initializeModels = async () => {
-    try {
-      const response = await fetch('/api/chat/models');
-      if (response.ok) {
-        const data = await response.json();
-        
-        // Set default model if available
-        if (data.defaultModel) {
-          setSelectedModelType(data.defaultModel.modelType);
-          setSelectedModel(data.defaultModel.model);
-          console.log(`🎯 Set default model: ${data.defaultModel.modelType} - ${data.defaultModel.model}`);
-        }
-        
-        setModelsLoaded(true);
-      } else {
-        console.error('Failed to fetch models');
-        setModelsLoaded(true); // Still mark as loaded to avoid infinite retries
-      }
-    } catch (error) {
-      console.error('Error initializing models:', error);
-      setModelsLoaded(true); // Still mark as loaded to avoid infinite retries
-    }
-  };
-
-  // Copy to clipboard helper
-  const handleCopy = (content: string) => {
-    if (typeof window !== 'undefined' && navigator.clipboard) {
-      navigator.clipboard.writeText(content);
-    }
-  };
-
-  // Model selection handler
-  const handleModelChange = (modelType: 'chatgpt' | 'ollama', model: string) => {
-    setSelectedModelType(modelType);
-    setSelectedModel(model);
-  };
-
-  // Reload message with different model
-  const handleReloadMessage = async (messageId: string, modelType: 'chatgpt' | 'ollama', model: string) => {
-    if (!currentChat) return;
-    
-    // Find the message to reload
-    const messageIndex = messages.findIndex(m => m.id === messageId);
-    if (messageIndex === -1 || messageIndex === 0) return; // Can't reload first message or if not found
-    
-    // Find the user message that prompted this response
-    const userMessage = messages[messageIndex - 1];
-    if (userMessage.role !== 'user') return;
-    
-    setReloadingMessageId(messageId);
-    setShowReloadModelSelector(null);
-    
-    try {
-      // Prepare context with user profile information
-      let context = '';
-      if (userProfile) {
-        if (userProfile.context) {
-          context += `User Context: ${userProfile.context}\n`;
-        }
-        if (userProfile.tags && userProfile.tags.length > 0) {
-          context += `User Tags: ${userProfile.tags.join(', ')}\n`;
-        }
-      }
-
-      // Call AI service with new model
-      const response = await fetch(`/api/chat/user/messaging/${currentChat.id}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: userMessage.content,
-          context: context,
-          domainKnowledge: {
-            ...domainKnowledge,
-            stateTaxCode: domainKnowledge.stateTaxCodes.join(',')
-          },
-          modelType: modelType,
-          model: model,
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        
-        // Update the message with new response
-        const updatedMessages = [...messages];
-        updatedMessages[messageIndex] = {
-          ...updatedMessages[messageIndex],
-          content: data.response,
-          timestamp: new Date(),
-        };
-        
-        setMessages(updatedMessages);
-        
-        // Update backend
-        await fetch(`/api/chat/chats/${currentChat.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: updatedMessages }),
-        });
-        
-        if (onChatContextUpdate) onChatContextUpdate(currentChat);
-      } else {
-        throw new Error('Failed to get response');
-      }
-    } catch (error) {
-      console.error('Error reloading message:', error);
-      // Optionally show error message
-    } finally {
-      setReloadingMessageId(null);
-    }
-  };
-
-  // User message edit logic
-  const handleEditClick = (msg: Message) => {
-    setEditingMsgId(msg.id);
-    setEditInput(msg.content);
-  };
-
-  const handleEditInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setEditInput(e.target.value);
-  };
-
-  // Save edited message and remove all subsequent messages
-  const handleEditSave = async (msg: Message) => {
-    if (!currentChat) return;
-    // Find index of the message
-    const idx = messages.findIndex(m => m.id === msg.id);
-    if (idx === -1) return;
-    // Prepare new messages: up to and including the edited one
-    const newMessages = [
-      ...messages.slice(0, idx),
-      { ...msg, content: editInput }
-    ];
-    setMessages(newMessages);
-    setEditingMsgId(null);
-    setEditInput('');
-    // Save to backend: update message, then overwrite conversation messages
-    try {
-      // Update the message
-      await fetch(`/api/chat/chats/${currentChat.id}/messages/${msg.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: editInput }),
-      });
-      // Overwrite the conversation with only the messages up to the edited one
-      await fetch(`/api/chat/chats/${currentChat.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: newMessages }),
-      });
-      // Optionally, refetch chat or update parent
-      if (onChatContextUpdate) {
-        const resp = await fetch(`/api/chat/chats/${currentChat.id}`);
-        if (resp.ok) {
-          const updated = await resp.json();
-          onChatContextUpdate(updated);
-        }
-      }
-      // Now, call LLM for next bot reply (simulate sendMessage for the edited message)
-      // Prepare context with user profile information
-      let context = '';
-      if (userProfile) {
-        if (userProfile.context) {
-          context += `User Context: ${userProfile.context}\n`;
-        }
-        if (userProfile.tags && userProfile.tags.length > 0) {
-          context += `User Tags: ${userProfile.tags.join(', ')}\n`;
-        }
-      }
-      setIsLoading(true);
-      const response = await fetch(`/api/chat/user/messaging/${currentChat.id}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: editInput,
-          context: context,
-          domainKnowledge: {
-            ...domainKnowledge,
-            stateTaxCode: domainKnowledge.stateTaxCodes.join(',')
-          },
-          modelType: selectedModelType,
-          model: selectedModel,
-        }),
-      });
-      if (response.ok) {
-        const data = await response.json();
-        const assistantMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: data.response,
-          timestamp: new Date(),
-          relevantDocs: data.relevantDocs
-        };
-        setMessages(prev => [...prev, assistantMessage]);
-      } else {
-        throw new Error('Failed to get response');
-      }
-    } catch (e) {
-      // Optionally show error
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: 'I apologize, but I\'m having trouble processing your request right now. Please try again later.',
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Show user message actions on hover with shorter delay, hide with longer delay
-  const handleUserMsgMouseEnter = (msgId: string) => {
-    setHoveredMsgId(msgId);
-    if (editTimeoutRef.current) clearTimeout(editTimeoutRef.current);
-    // Shorter delay before showing buttons
-    editTimeoutRef.current = setTimeout(() => {
-      setShowUserMsgActions(msgId);
-    }, 200); // 200ms delay before showing
-  };
-  const handleUserMsgMouseLeave = (msgId: string) => {
-    setHoveredMsgId(null);
-    if (editTimeoutRef.current) clearTimeout(editTimeoutRef.current);
-    // Shorter delay before hiding buttons
-    editTimeoutRef.current = setTimeout(() => {
-      setShowUserMsgActions(null);
-    }, 500); // 0.5 second delay before hiding
-  };
-
-  // Per-conversation context state
-  // When switching conversations, update domainKnowledge and titleInput
-  useEffect(() => {
-    setDomainKnowledgeState(getInitialDomainKnowledge(currentChat));
-    setTitleInput(currentChat?.title || '');
-    setMessages(currentChat?.messages || []);
-  }, [currentChat]);
-
-  // Remove starter message logic: do not set default assistant message for new conversations
+  // Set client-side rendering
   useEffect(() => {
     setIsClient(true);
   }, []);
 
-  // Save context filters to backend per conversation
-  const persistContextFilters = async (filters: any) => {
-    if (!currentChat) return;
-    try {
-      const response = await fetch(`http://localhost:5300/api/chat/chats/${currentChat.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contextFilters: {
-            ...domainKnowledge,
-            ...filters,
-            stateTaxCodes: filters.stateTaxCodes ?? domainKnowledge.stateTaxCodes,
-            profileTags: filters.profileTags ?? domainKnowledge.profileTags,
-            federalTaxCode: typeof filters.federalTaxCode === 'boolean' ? filters.federalTaxCode : domainKnowledge.federalTaxCode,
-          },
-        }),
-      });
-      if (response.ok) {
-        const updated = await response.json();
-        if (onChatContextUpdate) onChatContextUpdate(updated);
-      }
-    } catch (e) {
-      // Optionally show error
+  // Sync userProfile with prop
+  useEffect(() => {
+    if (propUserProfile) {
+      setUserProfile(propUserProfile);
     }
-  };
+  }, [propUserProfile]);
 
-  const setDomainKnowledge = (updater: any) => {
-    setDomainKnowledgeState((prev: any) => {
-      const next = typeof updater === 'function' ? updater(prev) : updater;
-      persistContextFilters(next);
-      return next;
-    });
-  };
-
-  // Save title to backend
-  const handleTitleSave = async () => {
-    if (!currentChat) return;
-    if (titleInput.trim() && titleInput !== currentChat.title) {
-      // Update the title in the backend
-      const response = await fetch(`http://localhost:5300/api/chat/chats/${currentChat.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: titleInput }),
+  // Sync domainKnowledge with currentChat contextFilters
+  useEffect(() => {
+    if (currentChat?.contextFilters) {
+      setDomainKnowledge({
+        stateTaxCodes: currentChat.contextFilters.stateTaxCodes || [],
+        filingEntity: (currentChat.contextFilters as any)?.filingEntity || 'individuals'
       });
-      if (response.ok) {
-        const updated = await response.json();
-        if (updateChatTitle) {
-          updateChatTitle(currentChat.id, titleInput);
+    }
+  }, [currentChat?.contextFilters]);
+
+  // Handle tab visibility changes to ensure streaming updates when tab becomes visible
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && streamingMessageRef.current) {
+        // Only auto-scroll if user is near bottom
+        if (isUserNearBottom) {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
         }
-        if (onChatContextUpdate) onChatContextUpdate(updated);
       }
-    }
-    setEditingTitle(false);
-  };
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  useEffect(() => {
-    if (messages.length > 0) {
-      // Set scroll position to bottom without animation
-      messagesEndRef.current?.scrollIntoView();
-    }
-  }, [messages, isClient]);
-
-  // Load conversation messages when currentConversation changes
-  useEffect(() => {
-    if (isClient && currentChat?.messages && currentChat.messages.length > 0) {
-      setMessages(currentChat.messages as Message[]);
-      // Set scroll position to bottom after messages are loaded (no animation)
-      setTimeout(() => messagesEndRef.current?.scrollIntoView(), 100);
-    } else if (isClient && !currentChat?.messages) {
-      // Only set messages to currentConversation?.messages or []
-      setMessages([]);
-    }
-  }, [currentChat, isClient]);
-
-  // Fix 1: Update sendMessage to always use the latest state
-  const sendMessage = async () => {
-    if (!inputMessage.trim() || isLoading) return;
-
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: inputMessage,
-      timestamp: new Date()
     };
 
-    // Build the new messages array synchronously
-    const userMessages = [...messages, userMessage];
-    setMessages(userMessages);
-    setInputMessage('');
-    setIsLoading(true);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [isUserNearBottom]);
+
+  // Check backend health periodically
+  useEffect(() => {
+    const checkHealthAndFetchStatus = async () => {
+      try {
+        const response = await fetch('/api/health');
+        const isHealthy = response.ok;
+        setBackendOnline(isHealthy);
+        setConnectionStatus({
+          healthy: isHealthy,
+          issues: isHealthy ? [] : ['Backend not responding'],
+          lastCheck: Date.now()
+        });
+      } catch (error) {
+        setBackendOnline(false);
+        setConnectionStatus({
+          healthy: false,
+          issues: ['Network error'],
+          lastCheck: Date.now()
+        });
+      }
+    };
+
+    checkHealthAndFetchStatus();
+    const interval = setInterval(checkHealthAndFetchStatus, 30000); // Check every 30 seconds
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Initialize models
+  useEffect(() => {
+    const initializeModels = async () => {
+      const maxRetries = 5;
+      const retryDelay = 3000; // 3 seconds
+      
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          console.log(`🔄 [ChatbotPanel] Initializing models (attempt ${attempt}/${maxRetries})`);
+          
+          const response = await fetch('/api/chat/models', {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            signal: AbortSignal.timeout(5000), // 5 second timeout
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            console.log('✅ [ChatbotPanel] Available models loaded:', data);
+            break; // Success, exit retry loop
+          } else if (response.status === 503) {
+            // Backend is starting up, retry after delay
+            const retryAfter = response.headers.get('Retry-After');
+            const delay = retryAfter ? parseInt(retryAfter) * 1000 : retryDelay;
+            
+            if (attempt < maxRetries) {
+              console.log(`⏳ [ChatbotPanel] Backend starting up, retrying model fetch in ${delay}ms (attempt ${attempt}/${maxRetries})`);
+              await new Promise(resolve => setTimeout(resolve, delay));
+              continue;
+            } else {
+              console.warn('⚠️ [ChatbotPanel] Backend is starting up, model initialization will retry later');
+            }
+          } else {
+            console.error(`❌ [ChatbotPanel] Failed to initialize models: ${response.status} ${response.statusText}`);
+            break;
+          }
+        } catch (error) {
+          console.error(`❌ [ChatbotPanel] Error initializing models (attempt ${attempt}/${maxRetries}):`, error);
+          
+          if (error instanceof Error) {
+            if (error.name === 'AbortError') {
+              console.log(`⏱️ [ChatbotPanel] Request timeout, retrying...`);
+            } else if (error.message.includes('fetch failed') || error.message.includes('Failed to fetch')) {
+              console.log(`🔌 [ChatbotPanel] Network error, backend may be starting up...`);
+            }
+          }
+          
+          if (attempt < maxRetries) {
+            // Wait before retrying with exponential backoff
+            const backoffDelay = retryDelay * Math.pow(1.5, attempt - 1);
+            console.log(`⏳ [ChatbotPanel] Retrying in ${backoffDelay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, backoffDelay));
+          } else {
+            console.warn('⚠️ [ChatbotPanel] Failed to initialize models after all retries - using default models');
+            // Don't break the app, just log the warning
+          }
+        }
+      }
+    };
+
+    // Only initialize models if we're on the client side and hydrated
+    if (typeof window !== 'undefined' && isHydrated) {
+      initializeModels();
+    }
+  }, []);
+
+  // Debug messages changes (only log when not streaming to avoid spam)
+  useEffect(() => {
+    if (!streamingMessageRef.current) {
+      console.log(`📋 [ChatbotPanel] Messages updated, count: ${messages.length}`);
+    }
+  }, [messages]);
+
+  // Keep a ref in sync to avoid stale closure during streaming
+  useEffect(() => {
+    isUserNearBottomRef.current = isUserNearBottom;
+  }, [isUserNearBottom]);
+
+  // Auto-subscribe to SSE when a new pending message is added (async mode)
+  useEffect(() => {
+    if (!currentChat || !isAsyncMode) return;
+
+    // Find any pending assistant messages that need SSE subscription
+    const pendingMessage = messages.find(msg => 
+      msg.role === 'assistant' && 
+      msg.status === 'pending' && 
+      msg.content === '' // New placeholder message
+    );
+
+    if (pendingMessage && !streamingMessageRef.current) {
+      console.log(`📡 [ChatbotPanel] Auto-starting SSE subscription for pending message ${pendingMessage.id}`);
+      
+      // Create abort controller for this SSE subscription
+      const controller = new AbortController();
+      setAbortController(controller);
+      
+      // Start SSE subscription
+      subscribeToAsyncUpdates(currentChat.id, pendingMessage.id, controller);
+    }
+  }, [messages, currentChat, isAsyncMode]);
+  
+  // Debug streaming updates - now triggered by actual state changes
+  useEffect(() => {
+    const streamingMessage = messages.find(m => m.status === 'streaming');
+    if (streamingMessage) {
+      console.log(`🔄 [ChatbotPanel] Streaming message updated: ${streamingMessage.content.length} chars`);
+      console.log(`🔄 [ChatbotPanel] Content preview: "${streamingMessage.content.slice(-50)}"`);
+    }
+  }, [messages]);
+  
+  // Force re-render trigger for debugging purposes
+  useEffect(() => {
+    console.log(`🎨 [ChatbotPanel] Component re-rendered with ${messages.length} messages`);
+    const streamingCount = messages.filter(m => m.status === 'streaming').length;
+    if (streamingCount > 0) {
+      console.log(`🎨 [ChatbotPanel] ${streamingCount} streaming messages currently active`);
+    }
+  });
+
+  // Update domain knowledge when currentChat changes
+  useEffect(() => {
+    setDomainKnowledge(getInitialDomainKnowledge(currentChat));
+  }, [currentChat]);
+
+  // Update editing title when currentChat changes
+  useEffect(() => {
+    setEditingTitle(currentChat?.title || '');
+  }, [currentChat?.title]);
+
+  // Auto-scroll to bottom when switching chats (without animation)
+  useEffect(() => {
+    if (currentChat && messages.length > 0) {
+      // Use instant scroll when switching chats
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+    }
+  }, [currentChat?.id, messages.length]);
+
+  const handleCopy = (content: string) => {
+    navigator.clipboard.writeText(content);
+  };
+
+  const handleModelChange = (modelType: 'chatgpt' | 'ollama', model: string) => {
+    setIsModelSwitching(true);
+    if (onGlobalModelChange) {
+      onGlobalModelChange(modelType, model);
+    }
+    setTimeout(() => setIsModelSwitching(false), 1000);
+  };
+
+  const handleReloadMessage = async (messageId: string, modelType: 'chatgpt' | 'ollama', model: string) => {
+    if (!currentChat || !onReloadMessage) return;
 
     try {
-      // Prepare context with user profile information
-      let context = '';
-      if (userProfile) {
-        if (userProfile.context) {
-          context += `User Context: ${userProfile.context}\n`;
-        }
-        if (userProfile.tags && userProfile.tags.length > 0) {
-          context += `User Tags: ${userProfile.tags.join(', ')}\n`;
-        }
-      }
-
-      // Use new AI API endpoint with model selection
-      const response = await fetch(`/api/chat/user/messaging/${currentChat?.id}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: inputMessage,
-          context: context,
-          domainKnowledge: {
-            ...domainKnowledge,
-            stateTaxCode: domainKnowledge.stateTaxCodes.join(',') // Convert array to string for backend compatibility
-          },
-          modelType: selectedModelType,
-          model: selectedModel,
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const assistantMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: data.response,
-          timestamp: new Date(),
-          relevantDocs: data.relevantDocs
-        };
-        // Build the final messages array
-        const allMessages = [...userMessages, assistantMessage];
-        setMessages(allMessages);
-        // Persist the full messages array to backend
-        await fetch(`/api/chat/chats/${currentChat?.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: allMessages }),
-        });
-        // After persisting messages, only call onChatContextUpdate if currentChat is valid
-        if (onChatContextUpdate && currentChat) onChatContextUpdate(currentChat);
-      } else {
-        throw new Error('Failed to get response');
+      const success = await onReloadMessage(messageId, modelType, model);
+      if (!success) {
+        console.error('Failed to reload message through ChatInstance');
       }
     } catch (error) {
-      console.error('Error sending message:', error);
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: 'I apologize, but I\'m having trouble processing your request right now. Please try again later.',
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, errorMessage]);
-      
-    } finally {
+      console.error('Error reloading message:', error);
+    }
+  };
+
+  const startEditingMessage = (messageId: string) => {
+    if (!currentChat) return;
+    const target = currentChat.messages.find((m) => m.id === messageId && m.role === 'user');
+    if (!target) return;
+    setEditingMessageId(messageId);
+    setInputMessage(target.content);
+  };
+
+  const handleTryAgain = async (assistantMessageId: string, _mode?: 'default' | 'concise' | 'detailed') => {
+    if (!currentChat || !onTryAgain) return;
+    try {
+      // Find the parent user message for this assistant response
+      const assistantIndex = currentChat.messages.findIndex(m => m.id === assistantMessageId);
+      let parentUserId: string | null = null;
+      if (assistantIndex !== -1) {
+        let idx = assistantIndex - 1;
+        while (idx >= 0) {
+          const msg = currentChat.messages[idx];
+          if (msg.role === 'user') { 
+            parentUserId = msg.id; 
+            break; 
+          }
+          idx--;
+        }
+      }
+
+      if (parentUserId) {
+        // Set loading state immediately so UI shows the new response position
+        setIsLoading(true);
+        
+        // Find the turn key for this user message to update variant index
+        const turnKey = parentUserId;
+        
+        // Automatically navigate to the latest response in this turn
+        // This ensures the UI shows "2/2" or "3/3" etc. immediately
+        const currentTurn = turns.find(turn => turn.user?.id === parentUserId);
+        if (currentTurn && currentTurn.assistants.length > 0) {
+          const latestVariantIndex = currentTurn.assistants.length - 1;
+          setTurnVariantIndex(prev => ({
+            ...prev,
+            [turnKey]: latestVariantIndex
+          }));
+          console.log(`🔄 [Try Again] Auto-navigated to latest variant: ${latestVariantIndex + 1}/${currentTurn.assistants.length}`);
+        }
+        
+        // Handle AbortError gracefully - this is expected when retrying
+        try {
+          // Kick off retry - this will create a new assistant message via the backend
+          const success = await onTryAgain(assistantMessageId, userProfile);
+          
+          if (success) {
+            console.log('✅ Try again initiated successfully');
+            // The backend will handle creating the new assistant message
+            // and the UI will update via the existing message update mechanisms
+          } else {
+            console.error('❌ Failed to initiate try again');
+            setIsLoading(false);
+          }
+        } catch (retryError) {
+          // Handle AbortError specifically - this is normal when retrying
+          if (retryError instanceof Error && retryError.name === 'AbortError') {
+            console.log('🔄 [Try Again] Previous request aborted (expected behavior)');
+            // Continue waiting for the new response
+          } else {
+            console.error('❌ Unexpected error during try again:', retryError);
+            setIsLoading(false);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error in handleTryAgain:', error);
       setIsLoading(false);
     }
   };
 
-  // When sending the first message (pendingNewChat), call onCreateChatWithMessage with model info
+  const handleEditClick = (msg: Message) => {
+    setFeedbackState(prev => ({
+      ...prev,
+      [msg.id]: {
+        ...prev[msg.id],
+        editReady: true,
+        input: msg.content
+      }
+    }));
+  };
+
+  const handleEditInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const messageId = e.target.dataset.messageId;
+    if (messageId) {
+      setFeedbackState(prev => ({
+        ...prev,
+        [messageId]: {
+          ...prev[messageId],
+          input: e.target.value
+        }
+      }));
+    }
+  };
+
+  const handleEditSave = async (msg: Message) => {
+    if (!currentChat || !onEditMessage) return;
+
+    const feedback = feedbackState[msg.id];
+    if (!feedback) return;
+
+    try {
+      const success = await onEditMessage(msg.id, feedback.input, userProfile);
+      if (success) {
+        // Clear edit state
+        setFeedbackState(prev => ({
+          ...prev,
+          [msg.id]: {
+            ...prev[msg.id],
+            editReady: false,
+            input: ''
+          }
+        }));
+      } else {
+        console.error('Failed to edit message through ChatInstance');
+      }
+    } catch (error) {
+      console.error('Error editing message:', error);
+    }
+  };
+
+  const handleUserMsgMouseEnter = (msgId: string) => {
+    setFeedbackState(prev => ({
+      ...prev,
+      [msgId]: {
+        ...prev[msgId],
+        showInput: true
+      }
+    }));
+  };
+
+  const handleUserMsgMouseLeave = (msgId: string) => {
+    setFeedbackState(prev => ({
+      ...prev,
+      [msgId]: {
+        ...prev[msgId],
+        showInput: false
+      }
+    }));
+  };
+
+  const persistContextFilters = async (filters: any) => {
+    if (!currentChat) return;
+
+    try {
+      await fetch(`/api/chat/chats/${currentChat.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contextFilters: filters
+        })
+      });
+    } catch (error) {
+      console.error('Error persisting context filters:', error);
+    }
+  };
+
+  const updateDomainKnowledge = (updater: any) => {
+    const newDomainKnowledge = typeof updater === 'function' ? updater(domainKnowledge) : updater;
+    setDomainKnowledge(newDomainKnowledge);
+    
+    // Persist to backend
+    persistContextFilters({
+      stateTaxCodes: newDomainKnowledge.stateTaxCodes,
+      profileTags: userProfile?.tags || [],
+      filingEntity: newDomainKnowledge.filingEntity || 'individuals'
+    });
+  };
+
+  const handleTitleSave = async () => {
+    if (!currentChat || !updateChatTitle) return;
+
+    try {
+      await updateChatTitle(currentChat.id, editingTitle);
+      setIsEditingTitle(false);
+    } catch (error) {
+      console.error('Error updating title:', error);
+    }
+  };
+
+  const scrollToBottom = useCallback(() => {
+    const scroller = chatScrollRef.current;
+    if (scroller) {
+      scroller.scrollTop = scroller.scrollHeight;
+    } else {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, []);
+
+  // Optimized scroll effect - trigger when messages change (including content updates)
+  useEffect(() => {
+    if (isUserNearBottom) {
+      scrollToBottom();
+    }
+  }, [messages, isUserNearBottom]);
+
+  const handleScroll = useCallback(() => {
+    const scroller = chatScrollRef.current;
+    if (!scroller) return;
+    const threshold = 100; // px from bottom to still auto-scroll
+    const nearBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - threshold;
+    setIsUserNearBottom(nearBottom);
+  }, []);
+
+  // Group messages into conversation turns (user + assistant variants)
+  type Turn = { user?: Message & { assistantVariants?: string[] }; assistants: Message[] };
+  const turns: Turn[] = useMemo(() => {
+    // Group assistant messages by their parent user via parentUserId when available.
+    const result: Turn[] = [];
+    const userIdToTurnIndex = new Map<string, number>();
+    let lastUserTurnIndex: number | null = null;
+
+    displayMessages.forEach((msg) => {
+      if (msg.role === 'user') {
+        // Start a new turn for this user
+        result.push({ user: msg as Turn['user'], assistants: [] });
+        const idx = result.length - 1;
+        userIdToTurnIndex.set(msg.id, idx);
+        lastUserTurnIndex = idx;
+      } else {
+        // Assistant: try to find its user via parentUserId; fallback to last user turn
+        let targetIdx: number | null = null;
+        if ((msg as any).parentUserId && userIdToTurnIndex.has((msg as any).parentUserId)) {
+          targetIdx = userIdToTurnIndex.get((msg as any).parentUserId)!;
+        } else {
+          targetIdx = lastUserTurnIndex;
+        }
+        if (targetIdx === null) {
+          // No user yet; start a turn without user
+          result.push({ assistants: [msg] });
+        } else {
+          result[targetIdx].assistants.push(msg);
+        }
+      }
+    });
+
+    return result;
+  }, [displayMessages]);
+
+  // Track selected assistant variant per turn
+  const [turnVariantIndex, setTurnVariantIndex] = useState<Record<string, number>>({});
+  const getTurnKey = (turn: Turn, idx: number) => turn.user?.id || `turn_${idx}`;
+
+  // Build a lightweight signature so we only react to meaningful changes
+  const turnsSignature = useMemo(
+    () =>
+      turns
+        .map((t, idx) => `${t.user?.id || `u${idx}`}:${t.assistants.map(a => a.id).join(',')}`)
+        .join('|'),
+    [turns]
+  );
+
+  // Ensure a default selection for any turn lacking one, and prune removed turns
+  useEffect(() => {
+    setTurnVariantIndex(prev => {
+      let changed = false;
+      const next = { ...prev } as Record<string, number>;
+
+      // Add defaults / fix out-of-range selections
+      turns.forEach((turn, idx) => {
+        const key = getTurnKey(turn, idx);
+        const total = turn.assistants.length;
+        if (total > 0) {
+          const current = next[key];
+          const desired = current === undefined || current >= total ? total - 1 : current;
+          if (current !== desired) {
+            next[key] = desired;
+            changed = true;
+          }
+        }
+      });
+
+      // Prune selections for removed turns
+      Object.keys(next).forEach(k => {
+        const exists = turns.some((turn, idx) => getTurnKey(turn, idx) === k);
+        if (!exists) {
+          delete next[k];
+          changed = true;
+        }
+      });
+
+      return changed ? next : prev;
+    });
+  }, [turnsSignature]);
+
+  // Show floating input only when welcome overlay is fully gone and the chat has content
+  const shouldShowFloatingInput = !pendingNewChat && !showWelcomeOverlay && (turns.length > 0);
+
+  const handleVariantPrev = (turnKey: string, total: number) => {
+    setTurnVariantIndex(prev => {
+      const current = prev[turnKey] ?? 0;
+      const next = (current - 1 + total) % total;
+      return { ...prev, [turnKey]: next };
+    });
+  };
+
+  const handleVariantNext = (turnKey: string, total: number) => {
+    setTurnVariantIndex(prev => {
+      const current = prev[turnKey] ?? 0;
+      const next = (current + 1) % total;
+      return { ...prev, [turnKey]: next };
+    });
+  };
+
+  // SSE subscription for async mode real-time updates
+  const subscribeToAsyncUpdates = async (chatId: string, messageId: string, abortController: AbortController) => {
+    try {
+      console.log(`📡 [${chatId}] Starting SSE subscription for message ${messageId}`);
+      
+      // Create a timeout signal separate from the abort controller for SSE connection
+      const sseTimeoutMs = 300000; // 5 minute timeout for SSE connection (same as backend timeout)
+      const timeoutSignal = AbortSignal.timeout(sseTimeoutMs);
+      const combinedSignal = AbortSignal.any([abortController.signal, timeoutSignal]);
+      
+      const response = await fetch(`/api/chat/user/messaging/${chatId}/subscribe`, {
+        signal: combinedSignal,
+        headers: {
+          'Accept': 'text/event-stream',
+          'Cache-Control': 'no-cache, no-transform',
+          'Connection': 'keep-alive',
+          'X-Requested-With': 'XMLHttpRequest'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`SSE subscription failed: ${response.status} ${response.statusText}`);
+      }
+      
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No response body for SSE');
+      }
+      
+      const decoder = new TextDecoder();
+      let accumulatedContent = '';
+      
+      console.log(`📡 [${chatId}] SSE connection established, waiting for events...`);
+      
+      let lastEventTime = Date.now();
+      let hasReceivedEvents = false;
+      
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            console.log(`📡 [${chatId}] SSE stream ended`);
+            break;
+          }
+          
+          const chunk = decoder.decode(value, { stream: true });
+          console.log(`📡 [${chatId}] SSE chunk received:`, chunk);
+          const lines = chunk.split('\n');
+          
+          let currentEvent = '';
+          
+          for (const line of lines) {
+            if (line.startsWith('event: ')) {
+              currentEvent = line.slice(7).trim();
+              continue;
+            }
+            
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6).trim();
+              if (!data) continue;
+              
+              // Skip ping events
+              if (currentEvent === 'ping') {
+                continue;
+              }
+              
+              try {
+                const eventData = JSON.parse(data);
+                
+                // Only log non-token events for clean console
+                const isTokenEvent = (currentEvent === 'token' || eventData.type === 'token');
+                if (!isTokenEvent) {
+                  console.log(`📡 [${chatId}] SSE event received:`, { currentEvent, eventData, targetMessageId: messageId });
+                }
+                
+                if (isTokenEvent && eventData.messageId === messageId) {
+                  // Update message status to streaming and append content
+                  hasReceivedEvents = true;
+                  lastEventTime = Date.now();
+                  accumulatedContent += eventData.content;
+                  
+                  // Update streaming message ref for immediate access
+                  streamingMessageRef.current = { id: messageId, content: accumulatedContent };
+                  
+                  // Update ChatInstance state for proper React re-renders with immediate flush
+                  if (updateStreamingMessage) {
+                    console.log(`🔄 [ChatbotPanel] Calling updateStreamingMessage for ${messageId}: ${accumulatedContent.length} chars`);
+                    flushSync(() => {
+                      updateStreamingMessage(messageId, accumulatedContent, 'streaming');
+                      // Force immediate re-render to prevent tab-switch dependency
+                      setForceRender(prev => prev + 1);
+                    });
+                  } else {
+                    console.warn(`⚠️ [ChatbotPanel] updateStreamingMessage not available for ${messageId}`);
+                  }
+                  
+                  // Only auto-scroll if the user is near bottom (use ref to avoid stale closure)
+                  if (isUserNearBottomRef.current) {
+                    scrollToBottom();
+                  }
+                  
+                } else if ((currentEvent === 'message_complete' || eventData.type === 'message_complete') && eventData.messageId === messageId) {
+                  // Clear any pending debounced updates
+                  if (updateTimeoutRef.current) {
+                    clearTimeout(updateTimeoutRef.current);
+                    updateTimeoutRef.current = null;
+                  }
+                  
+                  // Clear streaming ref
+                  streamingMessageRef.current = null;
+                  
+                  // Mark message as complete
+                  console.log(`✅ [${chatId}] Message ${messageId} completed via SSE`);
+                  
+                  // Update ChatInstance state for message completion with immediate flush
+                  if (updateStreamingMessage) {
+                    flushSync(() => {
+                      updateStreamingMessage(messageId, eventData.finalContent || accumulatedContent, 'complete');
+                      // Force final re-render for completion
+                      setForceRender(prev => prev + 1);
+                    });
+                  }
+                  
+                  // Notify parent to refresh context without duplicating messages
+                  if (onChatContextUpdate && currentChat) {
+                    onChatContextUpdate(currentChat);
+                  }
+                  
+                  // Reset loading state and abort controller to change button back to "Send"
+                  setIsLoading(false);
+                  setAbortController(null);
+                  break;
+                  
+                } else if ((currentEvent === 'message_cancelled' || eventData.type === 'message_cancelled') && eventData.messageId === messageId) {
+                  // Clear any pending debounced updates
+                  if (updateTimeoutRef.current) {
+                    clearTimeout(updateTimeoutRef.current);
+                    updateTimeoutRef.current = null;
+                  }
+                  
+                  // Clear streaming ref
+                  streamingMessageRef.current = null;
+                  
+                  // Mark message as cancelled
+                  console.log(`🛑 [${chatId}] Message ${messageId} cancelled via SSE`);
+                  
+                  // Update ChatInstance state for message cancellation
+                  if (updateStreamingMessage) {
+                    updateStreamingMessage(messageId, eventData.partialContent || accumulatedContent, 'cancelled');
+                  }
+                  
+                  // Reset loading state and abort controller to change button back to "Send"
+                  setIsLoading(false);
+                  setAbortController(null);
+                  break;
+                }
+                
+              } catch (parseError) {
+                console.warn('Failed to parse SSE event data:', parseError);
+              }
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+        
+        // Clean up any pending debounced updates
+        if (updateTimeoutRef.current) {
+          clearTimeout(updateTimeoutRef.current);
+          updateTimeoutRef.current = null;
+        }
+        
+        // Clear streaming ref
+        streamingMessageRef.current = null;
+        
+        // If SSE stream ended but we didn't receive any events, check backend for final result
+        if (!hasReceivedEvents) {
+          console.log(`📡 [${chatId}] SSE ended without receiving events, checking backend for result...`);
+          
+          // Fallback: poll backend for the final message content
+          setTimeout(async () => {
+            try {
+              const response = await fetch(`/api/chat/chats/${chatId}`);
+              if (response.ok) {
+                const chatData = await response.json();
+                const assistantMessage = chatData.messages.find((m: any) => m.id === messageId);
+                
+                if (assistantMessage && assistantMessage.status === 'complete' && assistantMessage.content) {
+                  console.log(`📡 [${chatId}] Found completed message in backend, updating UI`);
+                  // Update ChatInstance state for fallback completion
+                  if (updateStreamingMessage) {
+                    updateStreamingMessage(messageId, assistantMessage.content, 'complete');
+                  }
+                  setIsLoading(false);
+                  setAbortController(null);
+                }
+              }
+            } catch (error) {
+              console.error(`❌ [${chatId}] Failed to check backend for final result:`, error);
+            }
+          }, 1000); // Check after 1 second
+        }
+      }
+      
+    } catch (error) {
+      // Clean up any pending updates and streaming ref
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current);
+        updateTimeoutRef.current = null;
+      }
+      streamingMessageRef.current = null;
+      
+      if (abortController.signal.aborted) {
+        console.log(`📡 [${chatId}] SSE subscription cancelled`);
+      } else {
+        console.error(`❌ [${chatId}] SSE subscription error:`, error);
+        
+        // Update ChatInstance state for SSE error
+        if (updateStreamingMessage) {
+          updateStreamingMessage(messageId, 'Failed to connect for real-time updates. Please try again.', 'error');
+        }
+      }
+      
+      // Always reset loading state and abort controller to ensure button returns to "Send"
+      setIsLoading(false);
+      setAbortController(null);
+    }
+  };
+
+  // Note: Message cancellation now handled by ChatInstance
+
+  const sendMessage = async () => {
+    if (!inputMessage.trim() || isLoading || isModelSwitching) return;
+
+    // Check if backend is online
+    if (!backendOnline) {
+      // For backend offline, we still need to show an error message, but let's check if we have the method
+      console.error('Backend is offline');
+      return;
+    }
+
+    // If this is the first message and no chat exists, create one first
+    if (!currentChat && onCreateChatWithMessage) {
+      onCreateChatWithMessage(inputMessage, selectedModelType, selectedModel);
+      setInputMessage('');
+      return;
+    }
+
+    // If no current chat or no onSendMessage method, we can't proceed
+    if (!currentChat || !onSendMessage) {
+      console.error('No current chat available or no send message method');
+      return;
+    }
+
+    // Clear input immediately for better UX
+    const messageContent = inputMessage;
+    setInputMessage('');
+    setIsLoading(true);
+
+    // Use ChatInstance methods for proper state management
+    try {
+      let success = false;
+      if (editingMessageId && onEditMessage) {
+        success = await onEditMessage(editingMessageId, messageContent, userProfile);
+      } else if (onSendMessage) {
+        success = await onSendMessage(messageContent, userProfile);
+      }
+      if (!success) {
+        console.error('Failed to send message');
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
+    } finally {
+      setIsLoading(false);
+      // Clear edit mode after attempt
+      setEditingMessageId(null);
+    }
+  };
+
+  const cancelRequest = async () => {
+    console.log('🛑 Cancelling current request');
+    
+    // Use ChatInstance method for proper cancellation
+    if (onCancelRequest) {
+      try {
+        await onCancelRequest();
+      } catch (error) {
+        console.error('Error cancelling request:', error);
+      }
+    }
+    
+    // Clean up local loading state
+    setIsLoading(false);
+    if (abortController) {
+      abortController.abort();
+      setAbortController(null);
+    }
+  };
+
   const handleFirstMessage = async () => {
-    if (onCreateChatWithMessage && inputMessage.trim()) {
+    if (pendingNewChat && onCreateChatWithMessage) {
+      // Start creating/sending; Chat page will flip pendingNewChat to false when send starts/finishes
       onCreateChatWithMessage(inputMessage, selectedModelType, selectedModel);
       setInputMessage('');
     }
@@ -608,646 +980,322 @@ export default function ChatbotPanel({
   };
 
   function handleCopySettings() {
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('copy-conversation-settings', { detail: currentChat }));
-    }
+    const settings = {
+      modelType: selectedModelType,
+      model: selectedModel,
+      isAsync: currentChat?.modelSettings?.isAsync ?? true
+    };
+    navigator.clipboard.writeText(JSON.stringify(settings, null, 2));
   }
 
-  // Add updateConversationFilters helper in the component
-  function updateConversationFilters(updated: Chat) {
-    setMessages(updated.messages || []);
-    setTitleInput(updated.title);
-    // Update in localStorage
-    const cached = window.localStorage.getItem('cachedConversations');
-    let conversations = [];
-    if (cached) {
-      try {
-        conversations = JSON.parse(cached);
-        const idx = conversations.findIndex((c: any) => c.id === updated.id);
-        if (idx !== -1) {
-          conversations[idx] = { ...conversations[idx], ...updated };
-          window.localStorage.setItem('cachedConversations', JSON.stringify(conversations));
-        }
-      } catch {}
-    }
-    // Dispatch event to update in ChatHistory
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('conversation-title-updated', { detail: { id: updated.id, title: updated.title } }));
+  function updateConversationFilters(updated: ChatState) {
+    if (onChatContextUpdate) {
+      onChatContextUpdate(updated);
     }
   }
 
   const MarkdownCode = ({inline, className, children, ...props}: {inline?: boolean, className?: string, children?: React.ReactNode}) => {
-    return !inline ? (
-      <pre className="bg-gray-900 text-white rounded p-2 overflow-x-auto my-2"><code>{children}</code></pre>
+    const match = /language-(\w+)/.exec(className || '');
+    return !inline && match ? (
+      <pre className="bg-gray-900 text-white rounded p-2 overflow-x-auto max-w-full my-2">
+        <code className={className} {...props}>
+          {children}
+        </code>
+      </pre>
     ) : (
-      <code className="bg-gray-100 text-pink-700 rounded px-1 py-0.5 text-xs" {...props}>{children}</code>
+      <code className="bg-gray-100 text-pink-700 rounded px-1 py-0.5 text-xs break-words" {...props}>
+        {children}
+      </code>
     );
   };
 
-  // Fix: Custom paragraph renderer to avoid <pre> inside <p>
   function MarkdownParagraph(props: React.PropsWithChildren<React.HTMLAttributes<HTMLParagraphElement>>) {
-    const { children, ...rest } = props;
-    if (
-      Array.isArray(children) &&
-      children.length === 1 &&
-      (children[0] as any)?.type === 'pre'
-    ) {
-      return children[0] as React.ReactElement;
-    }
-    return <p {...rest}>{children}</p>;
+    return <p className="mb-4 last:mb-0" {...props} />;
   }
 
   const handleFeedback = async (messageId: string, type: 'like' | 'dislike') => {
-    setFeedback(prev => {
-      const prevState = prev[messageId] || { feedback: null, showInput: false, input: '', submitting: false, editReady: false };
-      if (type === 'dislike') {
-        // Only toggle editReady, not showInput
-        return {
-          ...prev,
-          [messageId]: {
-            ...prevState,
-            feedback: 'dislike',
-            editReady: !prevState.editReady,
-            showInput: false,
-          },
-        };
+    setFeedbackState(prev => ({
+      ...prev,
+      [messageId]: {
+        ...prev[messageId],
+        feedback: type
       }
-      // Like logic
-      return {
-        ...prev,
-        [messageId]: {
-          feedback: 'like',
-          showInput: false,
-          input: '',
-          submitting: false,
-          editReady: false,
-        },
-      };
-    });
-    // Send feedback to backend (without comment for like)
-    if (type === 'like') {
-      await fetch(`/api/chat/feedback`, {
+    }));
+
+    try {
+      await fetch('/api/chat/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          chatId: currentChat?.id,
           messageId,
           feedback: type,
-          context: messages.map(m => ({ role: m.role, content: m.content })),
-        }),
+          chatId: currentChat?.id
+        })
       });
+    } catch (error) {
+      console.error('Error submitting feedback:', error);
     }
   };
 
   const openFeedbackInput = (messageId: string) => {
-    setFeedback(prev => ({
+    setFeedbackState(prev => ({
       ...prev,
       [messageId]: {
         ...prev[messageId],
-        showInput: true,
-        editReady: false,
-      },
+        showInput: true
+      }
     }));
   };
 
   const handleFeedbackInput = (messageId: string, value: string) => {
-    setFeedback(prev => ({
+    setFeedbackState(prev => ({
       ...prev,
       [messageId]: {
         ...prev[messageId],
-        input: value,
-      },
+        input: value
+      }
     }));
   };
 
   const submitFeedbackComment = async (messageId: string) => {
-    setFeedback(prev => ({
-      ...prev,
-      [messageId]: {
-        ...prev[messageId],
-        submitting: true,
-      },
-    }));
-    await fetch(`/api/chat/feedback`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chatId: currentChat?.id,
-        messageId,
-        feedback: 'dislike',
-        comment: feedback[messageId]?.input,
-        context: messages.map(m => ({ role: m.role, content: m.content })),
-      }),
-    });
-    setFeedback(prev => ({
-      ...prev,
-      [messageId]: {
-        ...prev[messageId],
-        showInput: false,
-        submitting: false,
-      },
-    }));
-  };
+    const feedback = feedbackState[messageId];
+    if (!feedback || !feedback.input.trim()) return;
 
-  const closeFeedbackInput = (messageId: string) => {
-    setFeedback(prev => ({
-      ...prev,
-      [messageId]: {
-        feedback: null,
-        showInput: false,
-        input: '',
-        submitting: false,
-        editReady: false,
-      },
-    }));
-  };
+    try {
+      await fetch('/api/chat/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messageId,
+          feedback: feedback.feedback,
+          comment: feedback.input,
+          chatId: currentChat?.id
+        })
+      });
 
-  // If pendingNewChat, show intro and input, and only create chat on first message
-  if (pendingNewChat) {
-    return (
-      <div className="flex flex-col h-full bg-white">
-        <div className="border-b border-gray-200 p-4">
-          <div className="flex items-center gap-3">
-            <Bot className="h-6 w-6 text-blue-600" />
-            <h2 className="text-lg font-semibold text-gray-900">Tax Assistant</h2>
-          </div>
-          <p className="text-sm text-gray-600 mt-1">Powered by official IRS documents and AI</p>
-        </div>
-        <div className="flex-1 flex flex-col items-center justify-center text-center select-none">
-          <Bot className="w-16 h-16 text-gray-200 mb-6" />
-          <h1 className="text-2xl font-semibold text-gray-800 mb-2">What can I help you with?</h1>
-          <p className="text-gray-500 max-w-md mx-auto mb-8">Ask me anything about taxes, IRS documents, or your profile. Start typing below to begin your conversation.</p>
-          <form
-            className="w-full max-w-xl flex flex-col items-center"
-            onSubmit={e => {
-              e.preventDefault();
-              if (inputMessage.trim() && !isLoading) {
-                if (onCreateChatWithMessage) {
-                  onCreateChatWithMessage(inputMessage, selectedModelType, selectedModel);
-                  setInputMessage('');
-                }
-              }
-            }}
-          >
-            <input
-              className="w-full border rounded px-4 py-2 text-base focus:outline-none focus:ring-2 focus:ring-blue-200"
-              placeholder="Type your question..."
-              value={inputMessage}
-              onChange={e => setInputMessage(e.target.value)}
-              autoFocus
-            />
-            <button
-              type="submit"
-              className="mt-4 px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-              disabled={!inputMessage.trim()}
-            >
-              Start Chat
-            </button>
-          </form>
-        </div>
-      </div>
-    );
-  }
-
-  // Don't render until client-side to prevent hydration mismatch
-  if (!isClient) {
-    return (
-      <div className="flex flex-col h-full bg-white">
-        <div className="border-b border-gray-200 p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <Bot className="h-6 w-6 text-blue-600 mr-3" />
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">Tax Assistant</h2>
-                <p className="text-sm text-gray-600">Powered by official IRS documents and AI</p>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-gray-500">Loading...</div>
-        </div>
-      </div>
-    );
-  }
-
-  // Function to get model display name
-  const getModelDisplayName = () => {
-    if (selectedModelType === 'chatgpt') {
-      switch (selectedModel) {
-        case 'gpt-3.5-turbo':
-          return 'GPT-3.5 Turbo';
-        case 'gpt-4o-mini':
-          return 'GPT-4o Mini';
-        case 'gpt-4o':
-          return 'GPT-4o';
-        default:
-          return selectedModel;
-      }
-    } else {
-      return selectedModel;
+      closeFeedbackInput(messageId);
+    } catch (error) {
+      console.error('Error submitting feedback comment:', error);
     }
   };
 
-  // Function to get provider name
-  const getProviderName = () => {
-    return selectedModelType === 'chatgpt' ? 'ChatGPT' : 'Local Model';
+  const closeFeedbackInput = (messageId: string) => {
+    setFeedbackState(prev => ({
+      ...prev,
+      [messageId]: {
+        ...prev[messageId],
+        showInput: false,
+        input: ''
+      }
+    }));
   };
+
+  const getModelDisplayName = () => {
+    switch (selectedModel) {
+      case 'gpt-4o':
+        return 'GPT-4o';
+      case 'gpt-4o-mini':
+        return 'GPT-4o Mini';
+      case 'gpt-3.5-turbo':
+        return 'GPT-3.5 Turbo';
+      case 'phi3:3.8b':
+        return 'Phi-3 3.8B';
+      case 'mistral:7b':
+        return 'Mistral 7B';
+      default:
+        return selectedModel;
+    }
+  };
+
+  const getProviderName = () => {
+    return selectedModelType === 'chatgpt' ? 'OpenAI' : 'Ollama';
+  };
+
+  // Detect transition from welcome view to regular chat to trigger quick input animation
+  const prevPendingRef = useRef<boolean>(pendingNewChat);
+  useEffect(() => {
+    if (prevPendingRef.current && !pendingNewChat) {
+      setJustExitedWelcome(true);
+      const t = setTimeout(() => setJustExitedWelcome(false), 300);
+      return () => clearTimeout(t);
+    }
+    prevPendingRef.current = pendingNewChat;
+  }, [pendingNewChat]);
+
+  // Control welcome overlay mount for smooth exit animation
+  useEffect(() => {
+    if (pendingNewChat) {
+      setShowWelcomeOverlay(true);
+    } else {
+      const t = setTimeout(() => setShowWelcomeOverlay(false), 300);
+      return () => clearTimeout(t);
+    }
+  }, [pendingNewChat]);
 
   return (
     <div className="flex flex-col h-full bg-white">
-      {/* Chat Header */}
-      <div className="border-b border-gray-200 p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Bot className="h-6 w-6 text-blue-600" />
-            {editingTitle ? (
-              <input
-                value={titleInput}
-                onChange={e => setTitleInput(e.target.value)}
-                onBlur={handleTitleSave}
-                onKeyDown={e => { if (e.key === 'Enter') handleTitleSave(); }}
-                className="text-lg font-semibold text-gray-900 bg-white border-b border-blue-300 focus:outline-none"
-              />
-            ) : (
-              <h2
-                className="text-lg font-semibold text-gray-900 cursor-pointer"
-                onClick={() => setEditingTitle(true)}
-                title="Click to edit title"
-              >
-                {currentChat?.title || 'Tax Assistant'}
-              </h2>
+      {/* Header */}
+      <ChatHeader
+        title={pendingNewChat ? 'New Chat' : (currentChat?.title || 'Untitled Chat')}
+        isEditingTitle={isEditingTitle}
+        editingTitle={editingTitle}
+        onTitleChange={setEditingTitle}
+        onTitleEditStart={() => setIsEditingTitle(true)}
+        onTitleSave={handleTitleSave}
+        isHydrated={isHydrated}
+        modelDisplayName={getModelDisplayName()}
+        isAsyncMode={isAsyncMode}
+      />
+
+      {/* Main Content with overlay for welcome */}
+      <div className="flex-1 overflow-hidden relative">
+        {/* Chat Area (always mounted) */}
+        <div className="flex-1 overflow-y-auto p-4 pb-32" ref={chatScrollRef} onScroll={handleScroll}>
+          <div className="max-w-4xl mx-auto space-y-6 relative">
+            {turns.length > 0 && (
+              turns.map((turn, idx) => {
+              const key = getTurnKey(turn, idx);
+              const assistants = turn.assistants;
+              const variantTotal = assistants.length || 0;
+              const variantIndex = turnVariantIndex[key] ?? (variantTotal > 0 ? variantTotal - 1 : 0);
+              const shownAssistant = variantTotal > 0 ? assistants[variantIndex] : undefined;
+              const latestAssistant = variantTotal > 0 ? assistants[variantTotal - 1] : undefined;
+              const isLatestVariantStreaming = latestAssistant?.status === 'streaming' || latestAssistant?.status === 'pending';
+
+              return (
+                <React.Fragment key={key}>
+                  {turn.user && (
+                    <MessageBubble
+                      key={`${turn.user.id}-${turn.user.status || 'complete'}`}
+                      id={turn.user.id}
+                      role={turn.user.role}
+                      content={turn.user.content}
+                      timestamp={turn.user.timestamp}
+                      status={turn.user.status}
+                      onCopy={handleCopy}
+                      onLike={(id) => handleFeedback(id, 'like')}
+                      onDislike={(id) => handleFeedback(id, 'dislike')}
+                      liked={feedbackState[turn.user.id]?.feedback === 'like'}
+                      disliked={feedbackState[turn.user.id]?.feedback === 'dislike'}
+                      onEditUser={startEditingMessage}
+                    />
+                  )}
+                  {shownAssistant && (
+                    <MessageBubble
+                      key={`${shownAssistant.id}-${shownAssistant.status || 'complete'}`}
+                      id={shownAssistant.id}
+                      role={shownAssistant.role}
+                      content={shownAssistant.content}
+                      timestamp={shownAssistant.timestamp}
+                      status={shownAssistant.status}
+                      onCopy={handleCopy}
+                      onLike={(id) => handleFeedback(id, 'like')}
+                      onDislike={(id) => handleFeedback(id, 'dislike')}
+                      liked={feedbackState[shownAssistant.id]?.feedback === 'like'}
+                      disliked={feedbackState[shownAssistant.id]?.feedback === 'dislike'}
+                      onTryAgain={(assistantId) => handleTryAgain(assistantId)}
+                      variantIndex={variantTotal > 1 ? variantIndex + 1 : undefined}
+                      variantTotal={variantTotal > 1 ? variantTotal : undefined}
+                      onVariantPrev={variantTotal > 1 ? () => handleVariantPrev(key, variantTotal) : undefined}
+                      onVariantNext={variantTotal > 1 ? () => handleVariantNext(key, variantTotal) : undefined}
+                      isLatestVariantStreaming={variantTotal > 1 ? isLatestVariantStreaming : undefined}
+                    />
+                  )}
+                  {/* Optimistic assistant placeholder: show immediately when loading and no assistant yet for the last turn */}
+                  {!shownAssistant && idx === turns.length - 1 && currentChat?.loadingState?.isLoading && (
+                    <MessageBubble
+                      key={`assistant_placeholder_${turn.user?.id || idx}`}
+                      id={`assistant_placeholder_${turn.user?.id || idx}`}
+                      role="assistant"
+                      content={''}
+                      timestamp={new Date()}
+                      status={'streaming'}
+                      onCopy={handleCopy}
+                    />
+                  )}
+                </React.Fragment>
+              );
+              })
             )}
+            <div ref={messagesEndRef} />
           </div>
-          <ModelSelector
-            selectedModelType={selectedModelType}
-            selectedModel={selectedModel}
-            onModelChange={handleModelChange}
-          />
         </div>
-        <p className="text-sm text-gray-600 mt-1">Powered by official IRS documents and AI</p>
-        {/* Domain Knowledge & Profile Controls */}
-        <ContextFilters
-          domainKnowledge={domainKnowledge}
-          setDomainKnowledge={setDomainKnowledge}
-          profileTags={domainKnowledge.profileTags}
-          setProfileTags={(tags: string[]) => setDomainKnowledge((dk: any) => ({ ...dk, profileTags: tags }))}
-          setShowProfileDropdown={setShowProfileDropdown}
-          showProfileDropdown={showProfileDropdown}
-          setShowStateDropdown={setShowStateDropdown}
-          showStateDropdown={showStateDropdown}
-          stateDropdownRef={stateDropdownRef}
-        />
-      </div>
 
-      {/* Messages Area or Intro Landing */}
-      {messages.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center text-center select-none">
-          <Bot className="w-16 h-16 text-gray-200 mb-6" />
-          <h1 className="text-2xl font-semibold text-gray-800 mb-2">What can I help you with?</h1>
-          <p className="text-gray-500 max-w-md mx-auto mb-4">Ask me anything about taxes, IRS documents, or your profile. Start typing below to begin your conversation.</p>
-          {modelsLoaded && (
-            <div className="flex items-center gap-2 text-sm text-gray-400 bg-gray-50 px-3 py-2 rounded-lg">
-              <Bot className="w-4 h-4" />
-              <span>Powered by {getModelDisplayName()} ({getProviderName()})</span>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="flex-1 overflow-y-auto p-4 space-y-6">
-          {messages.map((message, idx) => (
-            <div
-              key={message.id}
-              className={`flex flex-col ${message.role === 'user' ? 'items-end' : 'items-start'}`}
-            >
-              <div
-                className={`max-w-[70%] rounded-lg px-4 py-2 relative group ${
-                  message.role === 'user'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-900'
-                }`}
-                onMouseEnter={message.role === 'user' ? () => handleUserMsgMouseEnter(message.id) : undefined}
-                onMouseLeave={message.role === 'user' ? () => handleUserMsgMouseLeave(message.id) : undefined}
-              >
-                <div className="flex items-start space-x-2">
-                  {message.role === 'assistant' && (
-                    <Bot className="h-4 w-4 text-gray-500 mt-0.5 flex-shrink-0" />
-                  )}
-                  {message.role === 'user' && (
-                    <User className="h-4 w-4 text-white mt-0.5 flex-shrink-0" />
-                  )}
-                  <div className="flex-1">
-                    {/* Bot message rendering */}
-                    {message.role === 'assistant' ? (
-                      <div className="prose prose-sm text-sm max-w-none relative">
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          components={{
-                            code: MarkdownCode,
-                            p: MarkdownParagraph,
-                            table({children}) {
-                              return <table className="min-w-full border text-xs my-2">{children}</table>;
-                            },
-                            th({children}) {
-                              return <th className="border px-2 py-1 bg-gray-100 font-semibold">{children}</th>;
-                            },
-                            td({children}) {
-                              return <td className="border px-2 py-1">{children}</td>;
-                            },
-                            ul({children}) {
-                              return <ul className="list-disc ml-6 my-2">{children}</ul>;
-                            },
-                            ol({children}) {
-                              return <ol className="list-decimal ml-6 my-2">{children}</ol>;
-                            },
-                            li({children}) {
-                              return <li className="mb-1">{children}</li>;
-                            },
-                          }}
-                        >
-                          {message.content}
-                        </ReactMarkdown>
-                        <div className="flex gap-2 mt-2 items-center relative">
-                          <button
-                            className="p-1 rounded hover:bg-gray-100"
-                            title="Copy"
-                            onClick={() => handleCopy(message.content)}
-                          >
-                            <Copy className="w-4 h-4 text-gray-500" />
-                          </button>
-                          <button
-                            className={`p-1 rounded hover:bg-blue-100 ${feedback[message.id]?.feedback === 'like' ? 'bg-blue-200' : ''}`}
-                            title="Like"
-                            onClick={() => handleFeedback(message.id, 'like')}
-                            disabled={feedback[message.id]?.feedback === 'like'}
-                          >
-                            <ThumbsUp className="w-4 h-4 text-blue-600" />
-                          </button>
-                          <button
-                            className={`p-1 rounded hover:bg-red-100 ${feedback[message.id]?.feedback === 'dislike' ? 'bg-red-200' : ''}`}
-                            title="Dislike"
-                            onClick={() => handleFeedback(message.id, 'dislike')}
-                          >
-                            <ThumbsDown className="w-4 h-4 text-red-600" />
-                          </button>
-                          <button
-                            className="p-1 rounded hover:bg-green-100 relative group"
-                            onClick={() => setShowReloadModelSelector(showReloadModelSelector === message.id ? null : message.id)}
-                            disabled={reloadingMessageId === message.id}
-                          >
-                            <RotateCcw className={`w-4 h-4 text-green-600 ${reloadingMessageId === message.id ? 'animate-spin' : ''}`} />
-                            {/* Tooltip */}
-                            <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-1 px-2 py-1 bg-black bg-opacity-70 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-20">
-                              Switch model ({selectedModelType === 'chatgpt' ? 'ChatGPT' : 'Ollama'})
-                              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-black border-b-opacity-70"></div>
-                            </div>
-                          </button>
-                          {feedback[message.id]?.feedback === 'dislike' && feedback[message.id]?.editReady && (
-                            <button
-                              className="p-1 rounded hover:bg-yellow-100 bg-yellow-50 ml-1"
-                              title="Leave feedback"
-                              onClick={() => openFeedbackInput(message.id)}
-                            >
-                              <MessageCircle className="w-4 h-4 text-yellow-600" />
-                            </button>
-                          )}
-                          {feedback[message.id]?.showInput && (
-                            <div className="absolute z-10 left-0 top-full bg-white border rounded shadow-lg p-1 w-60 min-h-[48px] flex flex-col gap-1 animate-fade-in mt-2" style={{ aspectRatio: '5 / 1' }}>
-                              <div className="flex justify-between items-center mb-1">
-                                <span className="text-xs font-semibold text-gray-700">Tell us what went wrong</span>
-                                <button onClick={() => closeFeedbackInput(message.id)} className="text-gray-400 hover:text-gray-700"><X className="w-4 h-4" /></button>
-                              </div>
-                              <textarea
-                                className="w-full border rounded p-1 text-xs min-h-[48px] resize-none"
-                                rows={2}
-                                placeholder="Your feedback..."
-                                value={feedback[message.id]?.input || ''}
-                                onChange={e => handleFeedbackInput(message.id, e.target.value)}
-                                disabled={feedback[message.id]?.submitting}
-                              />
-                              <div className="flex gap-1 justify-end mt-1">
-                                <button
-                                  className="bg-blue-600 text-white text-xs rounded px-1 py-0.5 hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1 min-w-5 min-h-5"
-                                  style={{ fontSize: '0.8rem' }}
-                                  onClick={() => submitFeedbackComment(message.id)}
-                                  disabled={feedback[message.id]?.submitting || !(feedback[message.id]?.input?.trim())}
-                                >
-                                  <Check className="w-3 h-3" />
-                                </button>
-                                <button
-                                  className="bg-gray-200 text-gray-700 text-xs rounded px-1 py-0.5 hover:bg-gray-300 flex items-center gap-1 min-w-5 min-h-5"
-                                  style={{ fontSize: '0.8rem' }}
-                                  onClick={() => closeFeedbackInput(message.id)}
-                                  disabled={feedback[message.id]?.submitting}
-                                >
-                                  <X className="w-3 h-3" />
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                          
-                          {/* Reload Model Selector */}
-                          {showReloadModelSelector === message.id && (
-                            <div className="absolute z-10 bottom-full right-0 bg-white border rounded shadow-lg p-2 w-64 mb-1">
-                              <div className="flex justify-between items-center mb-2">
-                                <span className="text-xs font-semibold text-gray-700">Choose model to regenerate</span>
-                                <button 
-                                  onClick={() => setShowReloadModelSelector(null)} 
-                                  className="text-gray-400 hover:text-gray-700"
-                                >
-                                  <X className="w-4 h-4" />
-                                </button>
-                              </div>
-                              <div className="space-y-1">
-                                {/* ChatGPT Models */}
-                                <div className="text-xs font-medium text-gray-600 mb-1">ChatGPT Models</div>
-                                <button
-                                  onClick={() => handleReloadMessage(message.id, 'chatgpt', 'gpt-4o')}
-                                  className="w-full text-left px-2 py-1 text-xs hover:bg-blue-50 rounded"
-                                >
-                                  <div className="font-medium">GPT-4o</div>
-                                  <div className="text-gray-500">Most capable GPT-4 model</div>
-                                </button>
-                                <button
-                                  onClick={() => handleReloadMessage(message.id, 'chatgpt', 'gpt-4o-mini')}
-                                  className="w-full text-left px-2 py-1 text-xs hover:bg-blue-50 rounded"
-                                >
-                                  <div className="font-medium">GPT-4o Mini</div>
-                                  <div className="text-gray-500">Faster and more cost-effective</div>
-                                </button>
-                                <button
-                                  onClick={() => handleReloadMessage(message.id, 'chatgpt', 'gpt-3.5-turbo')}
-                                  className="w-full text-left px-2 py-1 text-xs hover:bg-blue-50 rounded"
-                                >
-                                  <div className="font-medium">GPT-3.5 Turbo</div>
-                                  <div className="text-gray-500">Fast and efficient model</div>
-                                </button>
-                                
-                                {/* Ollama Models */}
-                                <div className="text-xs font-medium text-gray-600 mb-1 mt-2">Local Models (Ollama)</div>
-                                <button
-                                  onClick={() => handleReloadMessage(message.id, 'ollama', 'llama3.2:latest')}
-                                  className="w-full text-left px-2 py-1 text-xs hover:bg-blue-50 rounded"
-                                >
-                                  <div className="font-medium">llama3.2:latest</div>
-                                  <div className="text-gray-500">Local model (1.9GB)</div>
-                                </button>
-                                <button
-                                  onClick={() => handleReloadMessage(message.id, 'ollama', 'phi3:3.8b')}
-                                  className="w-full text-left px-2 py-1 text-xs hover:bg-blue-50 rounded"
-                                >
-                                  <div className="font-medium">phi3:3.8b</div>
-                                  <div className="text-gray-500">Local model (2.0GB)</div>
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="prose prose-sm text-sm max-w-none relative">
-                        {editingMsgId === message.id ? (
-                          <div className="space-y-2">
-                            <textarea
-                              value={editInput}
-                              onChange={handleEditInputChange}
-                              className="w-full p-2 border rounded text-sm resize-none text-black"
-                              rows={3}
-                              autoFocus
-                            />
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => handleEditSave(message)}
-                                className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 flex items-center gap-1"
-                              >
-                                <Save className="w-3 h-3" />
-                                Save
-                              </button>
-                              <button
-                                onClick={() => setEditingMsgId(null)}
-                                className="px-3 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <>
-                            <div>{message.content}</div>
-                          </>
-                        )}
-                      </div>
-                    )}
-                    <p className="text-xs text-gray-400 mt-1 text-right">
-                      {(() => { try { return new Date(message.timestamp).toLocaleTimeString(); } catch { return 'Invalid time'; } })()}
-                    </p>
-                  </div>
+        {/* Welcome Overlay (kept mounted for seamless transition) */}
+        {(showWelcomeOverlay || pendingNewChat) && (
+          <div
+            className={`absolute inset-0 bg-white transition-all duration-150 ease-out ${
+              pendingNewChat
+                ? 'opacity-100 translate-y-0 pointer-events-auto'
+                : 'opacity-0 -translate-y-2 pointer-events-none'
+            }`}
+          >
+            <div className="flex items-center justify-center h-full p-6 pb-32">
+              <div className="w-full max-w-2xl mx-auto animate-in slide-in-from-bottom-2 duration-150">
+                <div className="text-center text-gray-700 mb-6">
+                  <div className="text-3xl font-bold mb-2">Welcome to LucaTaxGPT</div>
+                  <div className="text-sm text-gray-500">Ask anything about taxes. I’ll cite and explain using official sources.</div>
                 </div>
-              </div>
-              
-              {/* User message action buttons - positioned completely outside the blue message */}
-              {message.role === 'user' && (
-                <div className={`flex gap-3 justify-end mt-2 transition-all duration-300 ease-in-out ${
-                  showUserMsgActions === message.id 
-                    ? 'opacity-100 transform translate-y-0' 
-                    : 'opacity-0 transform translate-y-2 pointer-events-none'
-                }`}>
-                  <button
-                    className="p-1 transition-colors duration-200 hover:bg-gray-100 rounded"
-                    title="Copy"
-                    onClick={() => handleCopy(message.content)}
-                  >
-                    <Copy className="w-4 h-4 text-gray-400 hover:text-gray-600" />
-                  </button>
-                  <button
-                    className="p-1 transition-colors duration-200 hover:bg-gray-100 rounded"
-                    title="Edit"
-                    onClick={() => handleEditClick(message)}
-                  >
-                    <Edit2 className="w-4 h-4 text-gray-400 hover:text-gray-600" />
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
-          
-          {/* Show pending state if the last message is from user and we're not loading */}
-          {messages.length > 0 && 
-           messages[messages.length - 1].role === 'user' && 
-           !isLoading && (
-            <div className="flex justify-start">
-              <div className="bg-gray-100 rounded-lg px-4 py-2">
-                <div className="flex items-center space-x-2">
-                  <Bot className="h-4 w-4 text-gray-500" />
-                  <div className="flex space-x-1">
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                {/* Match floating entry panel styling */}
+                <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-4 sm:p-5 animate-in fade-in duration-150">
+                  <div className="relative flex items-start gap-3">
+                    <textarea
+                      value={inputMessage}
+                      onChange={(e) => setInputMessage(e.target.value)}
+                      onKeyPress={handleKeyPress}
+                      placeholder="Type your message to begin..."
+                      className="flex-1 w-full p-3 sm:p-3.5 border border-gray-200 bg-white rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                      rows={3}
+                    />
+                    <button
+                      onClick={handleFirstMessage}
+                      disabled={!inputMessage.trim() || isLoading}
+                      className="h-10 sm:h-11 shrink-0 px-4 sm:px-5 bg-black text-white rounded-xl hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {isLoading ? 'Sending...' : 'Send'}
+                    </button>
                   </div>
-                  <span className="text-sm text-gray-500">Thinking...</span>
+                  <div className="mt-3 text-xs text-gray-400 text-center">Press Enter to send • Shift+Enter for a new line</div>
                 </div>
               </div>
             </div>
-          )}
-          
-          {isLoading && (
-            <div className="flex justify-start">
-              <div className="bg-gray-100 rounded-lg px-4 py-2">
-                <div className="flex items-center space-x-2">
-                  <Bot className="h-4 w-4 text-gray-500" />
-                  <div className="flex space-x-1">
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-      )}
-
-      {/* Input Area */}
-      <div className="border-t border-gray-200 p-4">
-        <div className="flex space-x-2">
-          <div className="flex-1">
-            <textarea
+          </div>
+        )}
+        {/* Input Area with quick slide-in after welcome (anchored to chat panel) */}
+        {shouldShowFloatingInput && (
+          <div className={justExitedWelcome ? 'animate-in slide-in-from-bottom-2 duration-150' : ''}>
+            <ChatInput
               value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Ask me about taxes, forms, deductions, or any tax-related questions..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              rows={2}
-              disabled={isLoading}
+              isLoading={isLoading}
+              onChange={setInputMessage}
+              onSubmit={pendingNewChat ? handleFirstMessage : sendMessage}
+              onCancel={cancelRequest}
+              placeholder={editingMessageId ? 'Edit your message and press Enter to re-run' : 'Type your message here...'}
+              domainKnowledge={domainKnowledge}
+              profileTags={userProfile.tags}
+              onDomainKnowledgeChange={updateDomainKnowledge}
+              onProfileTagsChange={(tags) => {
+                setUserProfile(prev => ({ ...prev, tags }));
+              }}
+              floatingWithinParent={true}
             />
           </div>
-          <button
-            onClick={pendingNewChat ? handleFirstMessage : sendMessage}
-            disabled={!inputMessage.trim() || isLoading}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Send className="h-4 w-4" />
-          </button>
-        </div>
-        
-        {/* Quick Suggestions */}
-        <div className="mt-3 flex flex-wrap gap-2">
-          {[
-            "What are the standard deduction amounts for 2024?",
-            "How do I file as self-employed?",
-            "What tax credits am I eligible for?",
-            "When is the tax filing deadline?"
-          ].map((suggestion, index) => (
-            <button
-              key={index}
-              onClick={() => setInputMessage(suggestion)}
-              className="text-xs px-3 py-1 bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200 transition-colors"
-            >
-              {suggestion}
-            </button>
-          ))}
-        </div>
+        )}
+      </div>
+
+      {/* Connection Status */}
+      <div className="mt-2 text-xs text-gray-500">
+        {isClient && (
+          <>
+            Last connection check: {new Date(connectionStatus.lastCheck).toLocaleTimeString()}
+            {connectionStatus.healthy && (
+              <span className="ml-2 text-green-600">✓ Connected</span>
+            )}
+            {!connectionStatus.healthy && (
+              <span className="ml-2 text-red-600">✗ Connection Issues</span>
+            )}
+          </>
+        )}
       </div>
     </div>
   );

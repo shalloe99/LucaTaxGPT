@@ -1,0 +1,39 @@
+{
+  "watch": [
+    "server.js",
+    "routes/",
+    "models/",
+    "services/"
+  ],
+  "ignore": [
+    "node_modules/",
+    "storage/",
+    "storage/**",
+    "storage/**/*",
+    "**/storage/**",
+    "logs/",
+    "*.log",
+    "chats.json",
+    "*.md",
+    "package-lock.json",
+    ".env",
+    ".env.*",
+    "tmp/",
+    "temp/",
+    "data/",
+    "worker.js",
+    "middleware/",
+    "**/*.json"
+  ],
+  "ext": "js",
+  "delay": 15000,
+  "verbose": true,
+  "restartable": "rs",
+  "env": {
+    "NODE_ENV": "development"
+  },
+  "exec": "node server.js",
+  "colours": false,
+  "signal": "SIGTERM",
+  "gracefulKill": true
+} 
