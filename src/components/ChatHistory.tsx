@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import type { ChatListItem } from '@/types/chat';
 
-import { MoreVertical, ArrowLeft, PencilLine, Settings } from 'lucide-react';
+import { MoreVertical, ArrowLeft, PencilLine, Settings, Search } from 'lucide-react';
 import ChatSettings, { ChatSettingsRef } from './ChatSettings';
 import { isYesterday, isToday, subDays, isAfter } from 'date-fns';
 import { checkBackendHealth } from '../lib/backendHealth';
@@ -696,7 +696,7 @@ export default function ChatHistory({
             aria-label="Search chats"
             title="Search chats"
           >
-                  {/* Removed chat icon */}
+            <Search className="w-5 h-5 text-gray-500" />
           </button>
           <button
             className="my-2 p-2 rounded hover:bg-gray-100"
@@ -936,7 +936,7 @@ export default function ChatHistory({
             >
               <div className="flex min-w-0 items-center gap-1.5">
                 <div className="flex items-center justify-center icon">
-                  {/* Removed chat icon */}
+                  <Search className="w-5 h-5 text-gray-700" />
                 </div>
                 <div className="flex min-w-0 grow items-center gap-2.5">
                   <span className="truncate text-sm text-gray-900">Search chats</span>
