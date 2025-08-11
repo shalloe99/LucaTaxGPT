@@ -79,10 +79,7 @@ export default function ContextFilters({
     handleProfileTagRemove(tag);
   };
 
-  // --- Federal Tax Code ---
-  const handleFederalClick = () => {
-    setDomainKnowledge((dk: any) => ({ ...dk, federalTaxCode: !dk.federalTaxCode }));
-  };
+
 
   // --- State Tax Code ---
   const handleStateBoxClick = () => {
@@ -133,19 +130,6 @@ export default function ContextFilters({
   // --- Render ---
   return (
     <div className="flex flex-wrap items-center gap-4 mt-4">
-      {/* Federal Tax Code - Clickable Box */}
-      <div
-        className={`cursor-pointer px-3 py-1 rounded border text-sm font-medium select-none transition-all ${
-          domainKnowledge.federalTaxCode
-            ? 'bg-blue-600 text-white border-blue-600 shadow'
-            : 'bg-white text-blue-700 border-blue-300 hover:bg-blue-50'
-        }`}
-        onClick={handleFederalClick}
-        title="Toggle federal tax code context"
-      >
-        federal tax code
-      </div>
-
       {/* State Tax Code - Clickable Box and Dropdown */}
       <div className="relative" ref={stateDropdownRef}>
         <div

@@ -2,23 +2,37 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom';
-import { Chat } from '../types/Conversation';
-import ChatHistoryModel from '../lib/ChatHistoryModel';
-import { v4 as uuidv4 } from 'uuid';
-import { MessageSquare, Plus, MoreVertical, ArrowLeft, LucideProps, PencilLine } from 'lucide-react';
-import { format, isYesterday, isThisWeek, isToday, subDays, isAfter, parseISO } from 'date-fns';
+import type { ChatListItem } from '@/types/chat';
+
+import { MoreVertical, ArrowLeft, PencilLine, Settings } from 'lucide-react';
+import ChatSettings, { ChatSettingsRef } from './ChatSettings';
+import { isYesterday, isToday, subDays, isAfter } from 'date-fns';
+import { checkBackendHealth } from '../lib/backendHealth';
+import chatService from '@/lib/api/chatService';
 
 interface ChatHistoryProps {
-  chats: Chat[];
-  setChats: React.Dispatch<React.SetStateAction<Chat[]>>;
+  chats: ChatListItem[];
+  setChats: React.Dispatch<React.SetStateAction<ChatListItem[]>>;
   selectedChatId?: string | null;
   setSelectedChatId?: (id: string | null) => void;
-  onChatSelect?: (chat: Chat) => void;
-  onNewChat?: (chat: Chat) => void;
+  onChatSelect?: (chat: ChatListItem) => void;
+  onNewChat?: (chat: ChatListItem) => void;
+  onDeleteChat?: (chatId: string) => Promise<boolean>; // Add delete callback
   onWidthChange?: (width: number) => void;
   width?: number;
   onModeSwitch?: () => void;
   reloadFlag?: number;
+  // Add new props for settings
+  selectedModelType?: 'chatgpt' | 'ollama';
+  selectedModel?: string;
+  isAsyncMode?: boolean;
+  onModelChange?: (modelType: 'chatgpt' | 'ollama', model: string) => void;
+  onModeChange?: (isAsync: boolean) => void;
+  onAsyncModeChange?: (isAsync: boolean) => void;
+  // Add lazy loading props
+  loadAllChats?: () => Promise<void>;
+  isLoading?: boolean;
+  isInitialized?: boolean;
 }
 
 // Add a type for the backend response
@@ -32,27 +46,16 @@ interface BackendConversation {
   messageCount?: number;
   messages?: any[];
   contextFilters?: {
-    federalTaxCode?: boolean;
     stateTaxCodes?: string[];
     profileTags?: string[];
   };
 }
 
-// Swirl SVG (OpenAI style, as a React component)
-function SwirlIcon(props: LucideProps) {
-  return (
-    <svg viewBox="0 0 40 40" fill="none" {...props}>
-      <g>
-        <path fill="#10A37F" d="M20.5 3.5c-4.5 0-8.5 2.2-10.9 5.6l-5.7 9.8c-2.4 4.1-2.4 9.1 0 13.2l5.7 9.8c2.4 4.1 6.4 6.3 10.9 6.3s8.5-2.2 10.9-6.3l5.7-9.8c2.4-4.1 2.4-9.1 0-13.2l-5.7-9.8C29 5.7 25 3.5 20.5 3.5z"/>
-        <path fill="#fff" d="M20.5 7.5c-3.7 0-7 1.8-8.9 4.7l-4.7 8.1c-1.9 3.3-1.9 7.3 0 10.6l4.7 8.1c1.9 3.3 5.2 5.1 8.9 5.1s7-1.8 8.9-5.1l4.7-8.1c1.9-3.3 1.9-7.3 0-10.6l-4.7-8.1C27.5 9.3 24.2 7.5 20.5 7.5z"/>
-      </g>
-    </svg>
-  );
-}
+//
 
 // Utility to group chats by date
-function groupChatsByDate(chats: Chat[]) {
-  const groups: { [key: string]: Chat[] } = { Today: [], Yesterday: [], 'Previous 7 Days': [], Older: [] };
+function groupChatsByDate(chats: ChatListItem[]) {
+  const groups: { [key: string]: ChatListItem[] } = { Today: [], Yesterday: [], 'Previous 7 Days': [], Older: [] };
   const now = new Date();
   chats.forEach(chat => {
     const date = chat.timestamp ? new Date(chat.timestamp) : new Date();
@@ -76,29 +79,65 @@ export default function ChatHistory({
   setSelectedChatId,
   onChatSelect, 
   onNewChat,
+  onDeleteChat,
   onModeSwitch,
   reloadFlag,
   pendingNewChat = false,
-  onStartNewChat
-}: ChatHistoryProps & { pendingNewChat?: boolean, onStartNewChat?: () => void }) {
+  onStartNewChat,
+  // Add new props with defaults
+  selectedModelType = 'ollama',
+  selectedModel = 'phi3:3.8b',
+  isAsyncMode = true,
+  onModelChange,
+  onModeChange,
+  onAsyncModeChange,
+  // Lazy loading props
+  loadAllChats,
+  isLoading: externalIsLoading,
+  isInitialized
+}: ChatHistoryProps & { 
+  pendingNewChat?: boolean, 
+  onStartNewChat?: () => void,
+  selectedModelType?: 'chatgpt' | 'ollama',
+  selectedModel?: string,
+  isAsyncMode?: boolean,
+  onModelChange?: (modelType: 'chatgpt' | 'ollama', model: string) => void,
+  onModeChange?: (isAsync: boolean) => void,
+  onAsyncModeChange?: (isAsync: boolean) => void
+}) {
   const [isDragging, setIsDragging] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
-  const [filteredChats, setFilteredChats] = useState<Chat[]>([]);
+  const [filteredChats, setFilteredChats] = useState<ChatListItem[]>([]);
   const [isClient, setIsClient] = useState(false);
   const [isLoadingChats, setIsLoadingChats] = useState(false);
   const [hasLoadedChats, setHasLoadedChats] = useState(false);
+  
+  // Use external loading state if provided, otherwise use internal state
+  const isLoading = externalIsLoading !== undefined ? externalIsLoading : isLoadingChats;
   const [storageWarning, setStorageWarning] = useState<string | null>(null);
   const dragStartX = useRef(0);
   const dragStartWidth = useRef(0);
   const [contextMenu, setContextMenu] = useState<{ show: boolean, x: number, y: number, chatId: string | null }>({ show: false, x: 0, y: 0, chatId: null });
   const [dropdownMenu, setDropdownMenu] = useState<{ show: boolean, chatId: string | null, anchor: { top: number, left: number } }>({ show: false, chatId: null, anchor: { top: 0, left: 0 } });
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false); // Start with false to prevent hydration mismatch
+  const [hasHydrated, setHasHydrated] = useState(false);
+  // Fully hide sidebar on very small screens
+  const [hideCompletely, setHideCompletely] = useState(false);
   // Add state for renaming chat
   const [renamingChatId, setRenamingChatId] = useState<string | null>(null);
   const [renameInput, setRenameInput] = useState('');
   const [deletingChatId, setDeletingChatId] = useState<string | null>(null);
+  const [showSettingsPopup, setShowSettingsPopup] = useState(false);
+  const [availableModels, setAvailableModels] = useState<{
+    chatgpt: Array<{ id: string; name: string; description: string }>;
+    ollama: Array<{ id: string; name: string; description: string }>;
+  }>({
+    chatgpt: [],
+    ollama: []
+  });
+  const chatSettingsRef = useRef<ChatSettingsRef>(null);
+  const [backendOnline, setBackendOnline] = useState<boolean>(true); // Assume online initially
 
   // Safe localStorage utility functions
   // const safeSetItem = (key: string, value: any) => {
@@ -121,13 +160,67 @@ export default function ChatHistory({
   // };
 
   const handleClearAll = () => {
-    ChatHistoryModel.clearAll();
+    if (window.confirm('Are you sure you want to clear all conversations? This action cannot be undone.')) {
+      setChats([]);
+    }
   };
 
   // Ensure client-side rendering to prevent hydration mismatch
   useEffect(() => {
     setIsClient(true);
+    setHasHydrated(true);
+    // Set sidebar open after client-side hydration
+    setSidebarOpen(true);
   }, []);
+
+  // Handle ESC key to close settings modal
+  useEffect(() => {
+    const handleEscKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && showSettingsPopup) {
+        handleCloseSettings();
+      }
+    };
+
+    if (showSettingsPopup) {
+      document.addEventListener('keydown', handleEscKey);
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscKey);
+    };
+  }, [showSettingsPopup]);
+
+  // Function to handle closing settings (cancel)
+  const handleCloseSettings = () => {
+    setShowSettingsPopup(false);
+  };
+
+  // Function to handle saving settings
+  const handleSaveSettings = () => {
+    // Call the save function on the ChatSettings component
+    chatSettingsRef.current?.save();
+    // Close the modal after saving
+    setShowSettingsPopup(false);
+  };
+
+  // Function to open settings popup (closes search if open)
+  const handleOpenSettings = () => {
+    setShowSearch(false); // Close search popup if open
+    setShowSettingsPopup(true);
+  };
+
+  // Function to open search popup (closes settings if open)
+  const handleOpenSearch = () => {
+    setShowSettingsPopup(false); // Close settings popup if open
+    setShowSearch(true);
+  };
+
+  // Load chats when sidebar is first opened (if using lazy loading)
+  useEffect(() => {
+    if (loadAllChats && isInitialized && isClient) {
+      loadAllChats();
+    }
+  }, [isInitialized, isClient]); // Remove loadAllChats from dependencies to prevent infinite loop
 
   useEffect(() => {
     function handleWarning(e: any) {
@@ -151,7 +244,6 @@ export default function ChatHistory({
       if (!id || !title) return;
       setChats(prev => {
         const updated = prev.map(chat => chat.id === id ? { ...chat, title } : chat);
-        ChatHistoryModel.saveAll(updated);
         return updated;
       });
     }
@@ -159,15 +251,16 @@ export default function ChatHistory({
     return () => window.removeEventListener('conversation-title-updated', handleTitleUpdate);
   }, []);
 
-  // Remove all localStorage and demo/mock data usage
-  // Replace loadConversations with backend API call
+  // Use lazy loading if provided, otherwise fall back to direct API call
   const loadChats = useCallback(async () => {
-    setIsLoadingChats(true);
-    try {
-      const response = await fetch('http://localhost:5300/api/chat/chats');
-      if (response.ok) {
-        const data: BackendConversation[] = await response.json();
-        // Map backend data to Conversation type
+    if (loadAllChats) {
+      // Use the lazy loading hook
+      await loadAllChats();
+    } else {
+      // Fallback to direct API call (legacy behavior)
+      setIsLoadingChats(true);
+      try {
+        const data = await chatService.listChats();
         const mapped = data.map(chat => {
           const messages = chat.messages || [];
           const filters = chat.contextFilters || {};
@@ -175,133 +268,106 @@ export default function ChatHistory({
             id: chat.id,
             title: chat.title,
             lastMessage: messages.length > 0 ? messages[messages.length - 1].content : '',
-            timestamp: typeof chat.timestamp === 'string' ? chat.timestamp : (chat.updatedAt || new Date().toISOString()),
+            timestamp: typeof (chat as any).timestamp === 'string' ? new Date((chat as any).timestamp) : new Date(chat.updatedAt || new Date().toISOString()),
             messageCount: messages.length,
-            messages,
             contextFilters: {
-              federalTaxCode: typeof filters.federalTaxCode === 'boolean' ? filters.federalTaxCode : true,
               stateTaxCodes: Array.isArray(filters.stateTaxCodes) ? filters.stateTaxCodes : [],
               profileTags: Array.isArray(filters.profileTags) ? filters.profileTags : [],
             },
-            createdAt: chat.createdAt || new Date().toISOString(),
-            updatedAt: chat.updatedAt || new Date().toISOString(),
-          };
+          } as ChatListItem;
         });
         setChats(mapped);
+      } catch (error) {
+        console.error('Error loading conversations:', error);
+        setChats([]);
+      } finally {
+        setIsLoadingChats(false);
       }
-    } catch (error) {
-      console.error('Error loading conversations:', error);
-      setChats([]);
-    } finally {
-      setIsLoadingChats(false);
     }
-  }, []);
+  }, [loadAllChats]);
 
   // Helper to check if the last chat is empty (no user or bot messages)
   function isLastChatEmpty() {
     if (chats.length === 0) return false;
     const lastChat = chats[0]; // assuming newest chat is at the top
-    return (!lastChat.messages || lastChat.messages.length === 0);
+    return (lastChat.messageCount === 0);
   }
 
   // Replace createNewConversation with backend API call
   const createNewChat = async () => {
-    // Prevent creating a new chat if the last chat is empty
-    if (isLastChatEmpty()) {
-      // Optionally, select the last empty chat
-      setSelectedChatId?.(chats[0].id);
-      onChatSelect?.(chats[0]);
+    // Prevent creating new chat if there are pending deletions
+    if (deletingChatId) {
+      console.log('Cannot create new chat while another chat is being deleted');
       return;
     }
+    
     try {
-      const response = await fetch('http://localhost:5300/api/chat/chats', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: 'New Conversation',
-          contextFilters: {
-            federalTaxCode: true,
-            stateTaxCodes: [],
-            profileTags: [],
-          },
-          messages: [],
-        }),
+      const newChat = await chatService.createChat({
+        title: 'New Conversation',
+        contextFilters: { stateTaxCodes: [], profileTags: [] },
+        messages: [],
       });
-      if (response.ok) {
-        const newChat = await response.json();
-        const chat = {
-          id: newChat.id,
-          title: newChat.title,
-          lastMessage: '',
-          timestamp: newChat.updatedAt || newChat.createdAt || new Date().toISOString(),
-          messageCount: 0,
-          messages: [],
-          contextFilters: {
-            federalTaxCode: typeof newChat.contextFilters?.federalTaxCode === 'boolean' ? newChat.contextFilters.federalTaxCode : true,
-            stateTaxCodes: Array.isArray(newChat.contextFilters?.stateTaxCodes) ? newChat.contextFilters.stateTaxCodes : [],
-            profileTags: Array.isArray(newChat.contextFilters?.profileTags) ? newChat.contextFilters.profileTags : [],
-          },
-          createdAt: newChat.createdAt || new Date().toISOString(),
-          updatedAt: newChat.updatedAt || new Date().toISOString(),
-        };
-        setChats(prev => [chat, ...prev]);
-        setSelectedChatId?.(chat.id);
-        onChatSelect?.(chat);
-        if (onNewChat) {
-          // Always pass a fresh object
-          onNewChat({ ...chat });
-        }
+      
+      const chat: ChatListItem = {
+        id: newChat.id,
+        title: newChat.title,
+        lastMessage: '',
+        timestamp: new Date(newChat.updatedAt || newChat.createdAt || new Date().toISOString()),
+        messageCount: 0,
+        contextFilters: {
+          stateTaxCodes: Array.isArray(newChat.contextFilters?.stateTaxCodes) ? newChat.contextFilters.stateTaxCodes : [],
+          profileTags: Array.isArray(newChat.contextFilters?.profileTags) ? newChat.contextFilters.profileTags : [],
+        },
+      };
+      setChats(prev => [chat, ...prev]);
+      setSelectedChatId?.(chat.id);
+      onChatSelect?.(chat);
+      if (onNewChat) {
+        // Always pass a fresh object
+        onNewChat({ ...chat });
       }
     } catch (error) {
       console.error('Error creating conversation:', error);
     }
   };
 
-  // Replace deleteConversation with backend API call
-  const deleteChat = async (chatId: string) => {
+
+
+  // When a chat is selected, fetch its details from backend
+  const handleChatSelect = async (chat: ChatListItem) => {
+    // Prevent selecting chats that are being deleted
+    if (deletingChatId === chat.id) {
+      console.log('Chat is being deleted, skipping selection');
+      return;
+    }
+    
+    setSelectedChatId?.(chat.id);
     try {
-      const response = await fetch(`http://localhost:5300/api/chat/chats/${chatId}`, {
-        method: 'DELETE',
-      });
-      if (response.ok) {
-        setChats(prev => prev.filter(chat => chat.id !== chatId));
-        if (selectedChatId === chatId) {
+      const chatData = await chatService.getChat(chat.id);
+        const messages = chatData.messages || [];
+        // Map backend response to local ChatListItem type
+        const typedChat: ChatListItem = {
+          id: chatData.id,
+          title: chatData.title,
+          lastMessage: messages.length > 0 ? messages[messages.length - 1].content : '',
+          timestamp: typeof (chatData as any).timestamp === 'string' ? new Date((chatData as any).timestamp) : new Date(chatData.updatedAt || new Date().toISOString()),
+          messageCount: messages.length,
+          contextFilters: {
+            stateTaxCodes: Array.isArray(chatData.contextFilters?.stateTaxCodes) ? chatData.contextFilters.stateTaxCodes : [],
+            profileTags: Array.isArray(chatData.contextFilters?.profileTags) ? chatData.contextFilters.profileTags : [],
+          },
+        };
+        onChatSelect?.(typedChat);
+    } catch (error) {
+      console.error('Error loading conversation details:', error);
+      // If the chat is not found, it might have been deleted
+      // Remove it from the local state to keep things in sync
+      if (error instanceof Error && error.message.includes('not found')) {
+        setChats(prev => prev.filter(c => c.id !== chat.id));
+        if (selectedChatId === chat.id) {
           setSelectedChatId?.(null);
         }
       }
-    } catch (error) {
-      console.error('Error deleting conversation:', error);
-    }
-  };
-
-  // When a chat is selected, fetch its details from backend
-  const handleChatSelect = async (chat: Chat) => {
-    setSelectedChatId?.(chat.id);
-    try {
-      const response = await fetch(`http://localhost:5300/api/chat/chats/${chat.id}`);
-      if (response.ok) {
-        let chat: BackendConversation = await response.json();
-        const messages = chat.messages || [];
-        // Map backend response to local Conversation type
-        const typedChat: Chat = {
-          id: chat.id,
-          title: chat.title,
-          lastMessage: messages.length > 0 ? messages[messages.length - 1].content : '',
-          timestamp: typeof chat.timestamp === 'string' ? chat.timestamp : (chat.updatedAt || new Date().toISOString()),
-          messageCount: messages.length,
-          messages,
-          contextFilters: {
-            federalTaxCode: typeof chat.contextFilters?.federalTaxCode === 'boolean' ? chat.contextFilters.federalTaxCode : true,
-            stateTaxCodes: Array.isArray(chat.contextFilters?.stateTaxCodes) ? chat.contextFilters.stateTaxCodes : [],
-            profileTags: Array.isArray(chat.contextFilters?.profileTags) ? chat.contextFilters.profileTags : [],
-          },
-          createdAt: chat.createdAt || new Date().toISOString(),
-          updatedAt: chat.updatedAt || new Date().toISOString(),
-        };
-        onChatSelect?.(typedChat);
-      }
-    } catch (error) {
-      console.error('Error loading conversation details:', error);
     }
   };
 
@@ -357,7 +423,7 @@ export default function ChatHistory({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
-      setShowSearch(true);
+      handleOpenSearch();
     }
     if (e.key === 'Escape') {
       setShowSearch(false);
@@ -372,17 +438,19 @@ export default function ChatHistory({
     }
   }, [isClient]);
 
-  // Add useEffect to load conversations on mount
+  // Add useEffect to load conversations on mount (only if not using lazy loading)
   useEffect(() => {
-    loadChats();
-  }, [selectedChatId, reloadFlag]);
+    if (!loadAllChats) {
+      loadChats();
+    }
+  }, [selectedChatId, reloadFlag, loadAllChats]);
 
   useEffect(() => {
     if (searchQuery.trim()) {
       setFilteredChats(
         chats.filter(chat =>
           chat.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          chat.lastMessage.toLowerCase().includes(searchQuery.toLowerCase())
+          (chat.lastMessage && chat.lastMessage.toLowerCase().includes(searchQuery.toLowerCase()))
         )
       );
     } else {
@@ -391,46 +459,46 @@ export default function ChatHistory({
   }, [searchQuery, chats]);
 
   function handleContextMenu(e: React.MouseEvent, chatId: string) {
+    // Prevent context menu if chat is being deleted
+    if (deletingChatId === chatId) {
+      e.preventDefault();
+      return;
+    }
+    
     e.preventDefault();
     setContextMenu({ show: true, x: e.clientX, y: e.clientY, chatId });
   }
 
   // Rename function and button to 'Copy context to new chat'
   function handleCopyContextToNewChat() {
-    if (typeof window !== 'undefined' && contextMenu.chatId) {
+    if (isClient && contextMenu.chatId) {
+      // Prevent copying context if chat is being deleted
+      if (deletingChatId === contextMenu.chatId) {
+        console.log('Chat is being deleted, cannot copy context');
+        setContextMenu({ ...contextMenu, show: false });
+        return;
+      }
+      
       const chat = chats.find(c => c.id === contextMenu.chatId);
       if (chat) {
         // Deep copy context filters (no shared references)
         const copiedContextFilters = JSON.parse(JSON.stringify({
-          federalTaxCode: typeof chat.contextFilters?.federalTaxCode === 'boolean' ? chat.contextFilters.federalTaxCode : true,
           stateTaxCodes: Array.isArray(chat.contextFilters?.stateTaxCodes) ? chat.contextFilters.stateTaxCodes : [],
           profileTags: Array.isArray(chat.contextFilters?.profileTags) ? chat.contextFilters.profileTags : [],
         }));
-        fetch('http://localhost:5300/api/chat/chats', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title: 'New Conversation',
-            contextFilters: copiedContextFilters,
-            messages: [],
-          }),
-        })
-          .then(res => res.json())
+        chatService
+          .createChat({ title: 'New Conversation', contextFilters: copiedContextFilters, messages: [] })
           .then(newChat => {
-            const chat = {
+            const chat: ChatListItem = {
               id: newChat.id,
               title: newChat.title,
               lastMessage: '',
-              timestamp: newChat.updatedAt || newChat.createdAt || new Date().toISOString(),
+              timestamp: new Date(newChat.updatedAt || newChat.createdAt || new Date().toISOString()),
               messageCount: 0,
-              messages: [],
               contextFilters: {
-                federalTaxCode: typeof newChat.contextFilters?.federalTaxCode === 'boolean' ? newChat.contextFilters.federalTaxCode : true,
                 stateTaxCodes: Array.isArray(newChat.contextFilters?.stateTaxCodes) ? newChat.contextFilters.stateTaxCodes : [],
                 profileTags: Array.isArray(newChat.contextFilters?.profileTags) ? newChat.contextFilters.profileTags : [],
               },
-              createdAt: newChat.createdAt || new Date().toISOString(),
-              updatedAt: newChat.updatedAt || new Date().toISOString(),
             };
             setChats(prev => [chat, ...prev]);
             setSelectedChatId?.(chat.id);
@@ -444,28 +512,46 @@ export default function ChatHistory({
     setContextMenu({ ...contextMenu, show: false });
   }
 
-  function handleDeleteFromMenu() {
-    if (contextMenu.chatId) {
-      deleteChat(contextMenu.chatId);
+  async function handleDeleteFromMenu() {
+    if (contextMenu.chatId && onDeleteChat) {
+      // Prevent deletion if chat is already being deleted
+      if (deletingChatId === contextMenu.chatId) {
+        console.log('Chat is already being deleted, skipping duplicate request');
+        setContextMenu({ ...contextMenu, show: false });
+        return;
+      }
+      
+      setDeletingChatId(contextMenu.chatId);
+      try {
+        await onDeleteChat(contextMenu.chatId);
+      } catch (error) {
+        console.error('Error deleting chat:', error);
+      } finally {
+        setDeletingChatId(null);
+      }
     }
     setContextMenu({ ...contextMenu, show: false });
   }
 
   // Function to handle rename save
   const handleRenameSave = async (chatId: string) => {
+    // Prevent rename if chat is being deleted
+    if (deletingChatId === chatId) {
+      console.log('Chat is being deleted, cannot rename');
+      return;
+    }
+    
     const newTitle = renameInput.trim();
     if (!newTitle) return;
     try {
-      const response = await fetch(`http://localhost:5300/api/chat/chats/${chatId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: newTitle }),
-      });
-      if (response.ok) {
+      await chatService.updateChatTitle(chatId, newTitle);
         setChats(prev => prev.map(chat => chat.id === chatId ? { ...chat, title: newTitle } : chat));
+        // Broadcast a global event so the parent and other listeners can update their state
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('conversation-title-updated', { detail: { id: chatId, title: newTitle } }));
+        }
         setRenamingChatId(null);
         setRenameInput('');
-      }
     } catch (error) {
       console.error('Error renaming chat:', error);
     }
@@ -473,21 +559,53 @@ export default function ChatHistory({
 
   // Fix delete handler to always use correct chat id and show loading
   const handleDeleteChat = async (chatId: string) => {
-    setDeletingChatId(chatId);
-    try {
-      const response = await fetch(`http://localhost:5300/api/chat/chats/${chatId}`, {
-        method: 'DELETE',
-      });
-      if (response.ok) {
+    // Prevent deletion if chat is already being deleted
+    if (deletingChatId === chatId) {
+      console.log('Chat is already being deleted, skipping duplicate request');
+      return;
+    }
+    
+    if (onDeleteChat) {
+      // Use the callback from main app
+      setDeletingChatId(chatId);
+      try {
+        // Call the backend delete first
+        const success = await onDeleteChat(chatId);
+        if (success) {
+          // Only remove from local state if backend deletion succeeds
+          setChats(prev => prev.filter(chat => chat.id !== chatId));
+          if (selectedChatId === chatId) {
+            setSelectedChatId?.(null);
+          }
+        } else {
+          // If deletion failed, don't remove from local state
+          console.warn('Chat deletion was not successful, keeping in local state');
+        }
+      } catch (error) {
+        console.error('Error deleting conversation:', error);
+        // If backend delete fails, don't remove from local state
+        // The chat will remain visible to the user
+      } finally {
+        setDeletingChatId(null);
+      }
+    } else {
+      // Fallback to direct API call if no callback provided
+      setDeletingChatId(chatId);
+      try {
+        // Call the backend delete first
+        await chatService.deleteChat(chatId);
+        // Only remove from local state if backend deletion succeeds
         setChats(prev => prev.filter(chat => chat.id !== chatId));
         if (selectedChatId === chatId) {
           setSelectedChatId?.(null);
         }
+      } catch (error) {
+        console.error('Error deleting conversation:', error);
+        // If backend delete fails, don't remove from local state
+        // The chat will remain visible to the user
+      } finally {
+        setDeletingChatId(null);
       }
-    } catch (error) {
-      console.error('Error deleting conversation:', error);
-    } finally {
-      setDeletingChatId(null);
     }
   };
 
@@ -502,20 +620,64 @@ export default function ChatHistory({
 
   // Add a useEffect to collapse sidebar if window.innerWidth < 600
   useEffect(() => {
+    if (!isClient) return; // Only run on client side
+    
     function handleResize() {
-      if (typeof window !== 'undefined' && window.innerWidth < 800) {
-        setSidebarOpen(false);
-      }
+      const width = window.innerWidth;
+      if (width < 800) setSidebarOpen(false);
+      // Hide completely when below Tailwind's sm breakpoint (~640px)
+      setHideCompletely(width < 640);
     }
     window.addEventListener('resize', handleResize);
     // Collapse on mount if already too small
-    if (typeof window !== 'undefined' && window.innerWidth < 800) {
-      setSidebarOpen(false);
-    }
+    if (window.innerWidth < 800) setSidebarOpen(false);
+    setHideCompletely(window.innerWidth < 640);
     return () => window.removeEventListener('resize', handleResize);
+  }, [isClient]);
+
+  // Add function to fetch available models
+  const fetchAvailableModels = async () => {
+    const maxRetries = 3;
+    const retryDelay = 2000; // 2 seconds
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const healthStatus = await checkBackendHealth();
+        setBackendOnline(healthStatus.isOnline);
+        if (healthStatus.isOnline) {
+          const data = await chatService.listModels();
+          const models = (data as any).models ? (data as any).models : (data as any);
+          setAvailableModels(models);
+          break;
+        } else {
+          console.warn('Backend is offline, using default models');
+          setAvailableModels({ chatgpt: [], ollama: [] });
+          break;
+        }
+      } catch (error) {
+        console.warn(
+          `Could not fetch models (attempt ${attempt}/${maxRetries}):`,
+          error instanceof Error ? error.message : 'Unknown error'
+        );
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+        } else {
+          setBackendOnline(false);
+          setAvailableModels({ chatgpt: [], ollama: [] });
+        }
+      }
+    }
+  };
+
+  useEffect(() => {
+    fetchAvailableModels();
   }, []);
 
   // Collapsed sidebar rendering
+  if (hideCompletely) {
+    // On very small screens, hide the sidebar entirely and rely on top banner in the chat panel
+    return null;
+  }
+
   if (!sidebarOpen) {
     return (
       <div className="flex h-full">
@@ -530,11 +692,11 @@ export default function ChatHistory({
           </button>
           <button
             className="my-2 p-2 rounded hover:bg-gray-100"
-            onClick={() => setShowSearch(true)}
+            onClick={handleOpenSearch}
             aria-label="Search chats"
             title="Search chats"
           >
-            <MessageSquare className="w-5 h-5 text-gray-500" />
+                  {/* Removed chat icon */}
           </button>
           <button
             className="my-2 p-2 rounded hover:bg-gray-100"
@@ -543,6 +705,19 @@ export default function ChatHistory({
             title="New chat"
           >
             <PencilLine className="w-5 h-5 text-gray-500" />
+          </button>
+          
+          {/* Spacer to push settings to bottom */}
+          <div className="flex-1"></div>
+          
+          {/* Settings Button at bottom */}
+          <button
+            className="mb-4 p-2 rounded hover:bg-gray-100"
+            onClick={handleOpenSettings}
+            aria-label="Model settings"
+            title="Model settings"
+          >
+            <Settings className="w-5 h-5 text-gray-500" />
           </button>
         </div>
         <div className="flex-1 h-full relative">{/* Chat panel will be here, not overlapped */}</div>
@@ -576,14 +751,37 @@ export default function ChatHistory({
                   {/* Add new chat as first item */}
                   <li>
                     <div
-                      className="cursor-pointer group relative flex items-center rounded-xl px-4 py-3 hover:bg-gray-100 focus:bg-gray-100"
+                      className={`cursor-pointer group relative flex items-center rounded-xl px-4 py-3 hover:bg-gray-100 focus:bg-gray-100 ${
+                        deletingChatId ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
                       tabIndex={0}
-                      onClick={() => { onStartNewChat?.(); setShowSearch(false); }}
-                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { onStartNewChat?.(); setShowSearch(false); } }}
+                      onClick={() => { 
+                        // Prevent creating new chat if there are pending deletions
+                        if (deletingChatId) {
+                          return;
+                        }
+                        onStartNewChat?.(); 
+                        setShowSearch(false); 
+                      }}
+                      onKeyDown={e => { 
+                        if (e.key === 'Enter' || e.key === ' ') { 
+                          // Prevent creating new chat if there are pending deletions
+                          if (deletingChatId) {
+                            return;
+                          }
+                          onStartNewChat?.(); 
+                          setShowSearch(false); 
+                        } 
+                      }}
                     >
                       <PencilLine className="w-5 h-5 text-gray-500" />
                       <div className="relative grow overflow-hidden whitespace-nowrap ps-2">
-                        <div className="text-sm font-medium text-black">New chat</div>
+                        <div className="text-sm font-medium text-black">
+                          New chat
+                          {deletingChatId && (
+                            <span className="ml-2 text-xs text-gray-400">(deletion in progress)</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </li>
@@ -599,14 +797,39 @@ export default function ChatHistory({
                         ...groups[group].map(chat => (
                           <li key={chat.id}>
                             <div
-                              className="cursor-pointer group relative flex items-center rounded-xl px-4 py-3 hover:bg-gray-100 focus:bg-gray-100"
+                              className={`cursor-pointer group relative flex items-center rounded-xl px-4 py-3 hover:bg-gray-100 focus:bg-gray-100 ${
+                                deletingChatId === chat.id ? 'opacity-50 cursor-not-allowed' : ''
+                              }`}
                               tabIndex={0}
-                              onClick={() => { handleChatSelect(chat); setShowSearch(false); setSearchQuery(''); }}
-                              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { handleChatSelect(chat); setShowSearch(false); setSearchQuery(''); } }}
+                              onClick={() => { 
+                                // Prevent selection if chat is being deleted
+                                if (deletingChatId === chat.id) {
+                                  return;
+                                }
+                                handleChatSelect(chat); 
+                                setShowSearch(false); 
+                                setSearchQuery(''); 
+                              }}
+                              onKeyDown={e => { 
+                                if (e.key === 'Enter' || e.key === ' ') { 
+                                  // Prevent selection if chat is being deleted
+                                  if (deletingChatId === chat.id) {
+                                    return;
+                                  }
+                                  handleChatSelect(chat); 
+                                  setShowSearch(false); 
+                                  setSearchQuery(''); 
+                                } 
+                              }}
                             >
-                              <MessageSquare className="w-5 h-5 text-gray-700" />
+                              {/* Removed chat icon */}
                               <div className="relative grow overflow-hidden whitespace-nowrap ps-2">
-                                <div className="text-sm truncate">{chat.title}</div>
+                                <div className="text-sm truncate">
+                                  {chat.title}
+                                  {deletingChatId === chat.id && (
+                                    <span className="ml-2 text-xs text-gray-400">(deleting...)</span>
+                                  )}
+                                </div>
                                 {chat.lastMessage && (
                                   <div className="text-xs text-gray-500 truncate">{chat.lastMessage}</div>
                                 )}
@@ -625,6 +848,49 @@ export default function ChatHistory({
             </div>
           </div>
         )}
+        
+        {/* Model Settings Popup (always render, even if sidebar is collapsed) */}
+        {showSettingsPopup && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={handleCloseSettings}>
+            <div 
+              className="flex flex-col max-h-[480px] min-h-[480px] w-[638px] bg-white rounded-xl shadow-xl" 
+              style={sidebarOpen ? { marginLeft: 245 } : {}} // Offset if sidebar is open
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Content */}
+              <div className="flex-1 p-6">
+                <ChatSettings
+                  ref={chatSettingsRef}
+                  selectedModelType={selectedModelType}
+                  selectedModel={selectedModel}
+                  isAsyncMode={isAsyncMode}
+                  onModelChange={onModelChange || (() => {})}
+                  onModeChange={onModeChange || (() => {})}
+                  onClose={handleCloseSettings}
+                  onSave={handleSaveSettings}
+                  onCancel={handleCloseSettings}
+                  availableModels={availableModels}
+                />
+              </div>
+              
+              {/* Footer */}
+              <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200">
+                <button
+                  onClick={handleCloseSettings}
+                  className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveSettings}
+                  className="px-4 py-2 text-sm bg-gray-800 text-white hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -633,7 +899,7 @@ export default function ChatHistory({
   return (
     <>
       <aside
-        className={`relative z-[99999] flex flex-col h-full bg-white border-r border-gray-200 min-w-[245px] max-w-[245px] w-[245px]${sidebarCollapsed ? ' hidden' : ''}`}
+        className={`relative z-[99999] flex flex-col h-full bg-white border-r border-gray-200 min-w-[245px] max-w-[245px] w-[245px]${!sidebarOpen ? ' hidden' : ''}`}
       >
         {/* Sidebar Header */}
         <div className="sticky top-0 z-20 bg-white border-b border-gray-200 flex items-center justify-between px-4 py-3">
@@ -655,170 +921,283 @@ export default function ChatHistory({
             </button>
           </div>
         </div>
-        {/* Vertical Menu: Search and New Chat */}
-        <div className="flex flex-col gap-1 px-2 pt-3 pb-2 border-b border-gray-100 bg-white">
-          {/* Search Chats */}
-          <div
-            tabIndex={0}
-            role="button"
-            className="group flex items-center justify-between gap-2 rounded-lg px-2 py-2 hover:bg-gray-100 focus:bg-gray-100 cursor-pointer __menu-item"
-            onClick={() => setShowSearch(true)}
-            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setShowSearch(true); }}
-            aria-label="Search chats"
-          >
-            <div className="flex min-w-0 items-center gap-1.5">
-              <div className="flex items-center justify-center icon">
-                <MessageSquare className="w-5 h-5 text-gray-700" />
+        {/* Scrollable Content Area */}
+        <div className="flex-1 flex flex-col overflow-y-auto overflow-x-hidden">
+          {/* Vertical Menu: Search and New Chat */}
+          <div className="flex flex-col gap-1 px-2 pt-3 pb-2 border-b border-gray-100 bg-white">
+            {/* Search Chats */}
+            <div
+              tabIndex={0}
+              role="button"
+              className="group flex items-center justify-between gap-2 rounded-lg px-2 py-2 hover:bg-gray-100 focus:bg-gray-100 cursor-pointer __menu-item"
+              onClick={handleOpenSearch}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleOpenSearch(); }}
+              aria-label="Search chats"
+            >
+              <div className="flex min-w-0 items-center gap-1.5">
+                <div className="flex items-center justify-center icon">
+                  {/* Removed chat icon */}
+                </div>
+                <div className="flex min-w-0 grow items-center gap-2.5">
+                  <span className="truncate text-sm text-gray-900">Search chats</span>
+                </div>
               </div>
-              <div className="flex min-w-0 grow items-center gap-2.5">
-                <span className="truncate text-sm text-gray-900">Search chats</span>
+              <div className="trailing highlight text-xs text-gray-400 touch:hidden">
+                ⌘ K
               </div>
             </div>
-            <div className="trailing highlight text-xs text-gray-400 touch:hidden">
-              ⌘ K
-            </div>
+            {/* New Chat */}
+            <a
+              tabIndex={0}
+              className="group flex items-center justify-between gap-2 rounded-lg px-2 py-2 hover:bg-gray-100 focus:bg-gray-100 cursor-pointer __menu-item"
+              onClick={e => { e.preventDefault(); onStartNewChat?.(); }}
+              href="#"
+              aria-label="New chat"
+              data-testid="create-new-chat-button"
+            >
+              <div className="flex min-w-0 items-center gap-1.5">
+                <div className="flex items-center justify-center icon">
+                  <PencilLine className="w-5 h-5 text-gray-700" />
+                </div>
+                <div className="flex min-w-0 grow items-center gap-2.5">
+                  <span className="truncate text-sm text-gray-900">New chat</span>
+                </div>
+              </div>
+              <div className="trailing highlight text-xs text-gray-400 touch:hidden">
+                ⇧ ⌘ O
+              </div>
+            </a>
           </div>
-          {/* New Chat */}
-          <a
-            tabIndex={0}
-            className="group flex items-center justify-between gap-2 rounded-lg px-2 py-2 hover:bg-gray-100 focus:bg-gray-100 cursor-pointer __menu-item"
-            onClick={e => { e.preventDefault(); onStartNewChat?.(); }}
-            href="#"
-            aria-label="New chat"
-            data-testid="create-new-chat-button"
-          >
-            <div className="flex min-w-0 items-center gap-1.5">
-              <div className="flex items-center justify-center icon">
-                <PencilLine className="w-5 h-5 text-gray-700" />
-              </div>
-              <div className="flex min-w-0 grow items-center gap-2.5">
-                <span className="truncate text-sm text-gray-900">New chat</span>
-              </div>
+          
+          {/* Chat List */}
+          <div className="flex flex-col px-2 py-2 bg-white">
+            <div className="pt-2 pb-3">
+              <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-2">Chats</h2>
             </div>
-            <div className="trailing highlight text-xs text-gray-400 touch:hidden">
-              ⇧ ⌘ O
-            </div>
-          </a>
-        </div>
-        {/* Chat List */}
-        <div className="flex-1 flex flex-col overflow-y-auto overflow-x-hidden px-2 py-2 bg-white">
-          <div className="sticky top-0 z-10 bg-white pt-2 pb-3">
-            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-2">Chats</h2>
-          </div>
-          <nav className="flex-1">
-            {isLoadingChats ? (
-              <div className="p-4 text-center text-gray-500">Loading chats...</div>
-            ) : chats.length === 0 ? (
-              <div className="p-4 text-center text-gray-400 text-sm">No chats found</div>
-            ) : (
-              <ul className="space-y-1">
-                {chats.map((chat) => (
-                  <li
-                    key={chat.id}
-                    className={`group flex items-center gap-2 px-2 py-2 rounded-lg cursor-pointer transition-colors ${selectedChatId === chat.id ? 'bg-gray-200 border-l-4 border-gray-700' : 'hover:bg-gray-100'}`}
-                    onClick={() => handleChatSelect(chat)}
-                    onContextMenu={(e) => handleContextMenu(e, chat.id)}
-                  >
-                    <MessageSquare className="w-5 h-5 text-gray-700 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      {/* Inline rename input or title */}
-                      {renamingChatId === chat.id ? (
-                        <input
-                          className="truncate font-normal text-xs text-gray-900 bg-gray-50 border border-gray-300 rounded px-2 py-1 w-full focus:outline-none focus:ring-2 focus:ring-gray-300"
-                          value={renameInput}
-                          autoFocus
-                          onChange={e => setRenameInput(e.target.value)}
-                          onBlur={() => handleRenameSave(chat.id)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') handleRenameSave(chat.id);
-                            if (e.key === 'Escape') { setRenamingChatId(null); setRenameInput(''); }
-                          }}
-                          maxLength={60}
-                        />
-                      ) : (
-                        <div className="truncate font-normal text-xs text-gray-900">{chat.title}</div>
-                      )}
-                      {chat.lastMessage && (
-                        <div className="truncate text-xs text-gray-500">{chat.lastMessage}</div>
-                      )}
-                    </div>
-                    <div className="relative">
+            <nav className="flex-1">
+              {isLoading ? (
+                <div className="p-4 text-center text-gray-500">Loading chats...</div>
+              ) : chats.length === 0 ? (
+                <div className="p-4 text-center text-gray-400 text-sm">
+                  {loadAllChats ? (
+                    <div>
+                      <div className="mb-2">No chats found</div>
                       <button
-                        className="p-1 rounded-full hover:bg-gray-200 transition-opacity"
-                        ref={el => {
-                          if (el && dropdownMenu.show && dropdownMenu.chatId === chat.id) {
-                            const rect = el.getBoundingClientRect();
-                            if (dropdownMenu.anchor.top !== rect.bottom || dropdownMenu.anchor.left !== rect.right) {
-                              setDropdownMenu(dm => ({ ...dm, anchor: { top: rect.bottom, left: rect.right } }));
-                            }
-                          }
-                        }}
-                        onClick={e => {
-                          e.stopPropagation();
-                          const rect = (e.target as HTMLElement).getBoundingClientRect();
-                          setDropdownMenu({ show: true, chatId: chat.id, anchor: { top: rect.bottom, left: rect.right } });
-                          setContextMenu({ show: false, x: 0, y: 0, chatId: null }); // Hide global context menu
-                        }}
-                        title="Chat options"
+                        onClick={() => loadAllChats()}
+                        className="px-3 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
                       >
-                        <MoreVertical className="w-4 h-4 text-gray-400" />
+                        Load Chats
                       </button>
-                      {/* Dropdown menu for chat options */}
-                      {dropdownMenu.show && dropdownMenu.chatId === chat.id && typeof window !== 'undefined' && ReactDOM.createPortal(
-                        <div
-                          className="fixed z-[200000] bg-white rounded shadow-lg w-32 py-1 flex flex-col justify-center items-center"
-                          style={{ top: dropdownMenu.anchor.top, left: dropdownMenu.anchor.left, minWidth: '7.5rem', boxShadow: '0 4px 16px 0 rgba(0,0,0,0.10)' }}
-                        >
-                          <button
-                            onClick={() => {
-                              setRenamingChatId(chat.id);
-                              setRenameInput(chat.title);
-                              setDropdownMenu({ show: false, chatId: null, anchor: { top: 0, left: 0 } });
-                            }}
-                            className="block w-11/12 mx-auto mb-1 px-2 py-1 text-center text-[13px] font-medium text-gray-800 hover:bg-gray-100 focus:bg-gray-100 transition rounded"
-                            style={{ minHeight: '32px' }}
-                          >
-                            Rename
-                          </button>
-                          <button
-                            onClick={() => { handleDeleteChat(chat.id); setDropdownMenu({ show: false, chatId: null, anchor: { top: 0, left: 0 } }); }}
-                            className="block w-11/12 mx-auto px-2 py-1 text-center text-[13px] font-medium text-red-600 hover:bg-gray-100 focus:bg-gray-100 transition rounded disabled:opacity-60"
-                            style={{ minHeight: '32px' }}
-                            disabled={deletingChatId === chat.id}
-                          >
-                            {deletingChatId === chat.id ? 'Deleting...' : 'Delete'}
-                          </button>
-                        </div>,
-                        window.document.body
-                      )}
                     </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </nav>
+                  ) : (
+                    "No chats found"
+                  )}
+                </div>
+              ) : (
+                <ul className="space-y-1">
+                  {chats.map((chat) => (
+                    <li
+                      key={chat.id}
+                      className={`group flex items-center gap-2 px-2 py-2 rounded-lg cursor-pointer transition-colors ${
+                        selectedChatId === chat.id ? 'bg-gray-200 border-l-4 border-gray-700' : 'hover:bg-gray-100'
+                      } ${
+                        deletingChatId === chat.id ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
+                      onClick={() => {
+                        // Prevent selection if chat is being deleted
+                        if (deletingChatId === chat.id) {
+                          return;
+                        }
+                        handleChatSelect(chat);
+                      }}
+                      onContextMenu={(e) => {
+                        // Prevent context menu if chat is being deleted
+                        if (deletingChatId === chat.id) {
+                          e.preventDefault();
+                          return;
+                        }
+                        handleContextMenu(e, chat.id);
+                      }}
+                    >
+                       {/* Removed chat icon */}
+                      <div className="flex-1 min-w-0">
+                        {/* Inline rename input or title */}
+                        {renamingChatId === chat.id ? (
+                          <input
+                            className="truncate font-normal text-xs text-gray-900 bg-gray-50 border border-gray-300 rounded px-2 py-1 w-full focus:outline-none focus:ring-2 focus:ring-gray-300"
+                            value={renameInput}
+                            autoFocus
+                            onChange={e => setRenameInput(e.target.value)}
+                            onBlur={() => handleRenameSave(chat.id)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') handleRenameSave(chat.id);
+                              if (e.key === 'Escape') { setRenamingChatId(null); setRenameInput(''); }
+                            }}
+                            maxLength={60}
+                          />
+                        ) : (
+                          <div className="truncate font-normal text-xs text-gray-900">
+                            {chat.title}
+                            {deletingChatId === chat.id && (
+                              <span className="ml-2 text-xs text-gray-400">(deleting...)</span>
+                            )}
+                          </div>
+                        )}
+                        {chat.lastMessage && (
+                          <div className="truncate text-xs text-gray-500">{chat.lastMessage}</div>
+                        )}
+                      </div>
+                      <div className="relative">
+                        <button
+                          className={`p-1 rounded-full hover:bg-gray-200 transition-opacity ${
+                            deletingChatId === chat.id ? 'opacity-50 cursor-not-allowed' : ''
+                          }`}
+                          disabled={deletingChatId === chat.id}
+                          ref={el => {
+                            if (el && dropdownMenu.show && dropdownMenu.chatId === chat.id) {
+                              const rect = el.getBoundingClientRect();
+                              if (dropdownMenu.anchor.top !== rect.bottom || dropdownMenu.anchor.left !== rect.right) {
+                                setDropdownMenu(dm => ({ ...dm, anchor: { top: rect.bottom, left: rect.right } }));
+                              }
+                            }
+                          }}
+                          onClick={(e) => {
+                            // Prevent dropdown if chat is being deleted
+                            if (deletingChatId === chat.id) {
+                              e.stopPropagation();
+                              return;
+                            }
+                            e.stopPropagation();
+                            setDropdownMenu({
+                              show: !dropdownMenu.show || dropdownMenu.chatId !== chat.id,
+                              chatId: dropdownMenu.show && dropdownMenu.chatId === chat.id ? null : chat.id,
+                              anchor: { top: e.currentTarget.getBoundingClientRect().bottom, left: e.currentTarget.getBoundingClientRect().right }
+                            });
+                          }}
+                        >
+                          <MoreVertical className="w-4 h-4 text-gray-400" />
+                        </button>
+                        {/* Dropdown menu for chat options */}
+                        {dropdownMenu.show && dropdownMenu.chatId === chat.id && isClient && ReactDOM.createPortal(
+                          <div
+                            className="fixed z-[200000] bg-white rounded shadow-lg w-32 py-1 flex flex-col justify-center items-center"
+                            style={{ top: dropdownMenu.anchor.top, left: dropdownMenu.anchor.left, minWidth: '7.5rem', boxShadow: '0 4px 16px 0 rgba(0,0,0,0.10)' }}
+                          >
+                            <button
+                              onClick={() => {
+                                // Prevent rename if chat is being deleted
+                                if (deletingChatId === chat.id) {
+                                  return;
+                                }
+                                setRenamingChatId(chat.id);
+                                setRenameInput(chat.title);
+                                setDropdownMenu({ show: false, chatId: null, anchor: { top: 0, left: 0 } });
+                              }}
+                              className={`block w-11/12 mx-auto mb-1 px-2 py-1 text-center text-[13px] font-medium text-gray-800 hover:bg-gray-100 focus:bg-gray-100 transition rounded ${
+                                deletingChatId === chat.id ? 'opacity-50 cursor-not-allowed' : ''
+                              }`}
+                              style={{ minHeight: '32px' }}
+                              disabled={deletingChatId === chat.id}
+                            >
+                              {deletingChatId === chat.id ? 'Renaming...' : 'Rename'}
+                            </button>
+                            <button
+                              onClick={() => { handleDeleteChat(chat.id); setDropdownMenu({ show: false, chatId: null, anchor: { top: 0, left: 0 } }); }}
+                              className="block w-11/12 mx-auto px-2 py-1 text-center text-[13px] font-medium text-red-600 hover:bg-gray-100 focus:bg-gray-100 transition rounded disabled:opacity-60"
+                              style={{ minHeight: '32px' }}
+                              disabled={deletingChatId === chat.id}
+                            >
+                              {deletingChatId === chat.id ? 'Deleting...' : 'Delete'}
+                            </button>
+                          </div>,
+                          window.document.body
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </nav>
+          </div>
         </div>
 
-        {/* Footer */}
-        <div className="border-t border-gray-200 px-4 py-3 text-xs text-gray-400 text-center bg-white">
-          LucaTaxGPT v1.0
+                {/* Footer with Settings */}
+        <div className="border-t border-gray-200 bg-white">
+          {/* Settings Button */}
+          <div className="p-3">
+            <button
+              onClick={handleOpenSettings}
+              className="flex items-center gap-2 w-full px-3 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <Settings className="w-4 h-4" />
+              <span className="text-sm font-medium">Settings</span>
+            </button>
+          </div>
+          
+          {/* Version Footer */}
+          <div className="px-4 py-2 text-xs text-gray-400 text-center border-t border-gray-100">
+            LucaTaxGPT v1.0
+          </div>
         </div>
 
         {/* Context Menu */}
         {contextMenu.show && (
           <div style={{ position: 'fixed', top: contextMenu.y, left: contextMenu.x, zIndex: 50 }} className="bg-white border rounded shadow-lg">
-            <button onClick={handleCopyContextToNewChat} className="block w-full px-4 py-2 text-left hover:bg-gray-100">Copy context to new chat</button>
-            <button onClick={handleDeleteFromMenu} className="block w-full px-4 py-2 text-left hover:bg-gray-100 text-red-600">Delete</button>
+            <button onClick={handleCopyContextToNewChat} className={`block w-full px-4 py-2 text-left hover:bg-gray-100 ${
+                deletingChatId === contextMenu.chatId ? 'text-gray-400 cursor-not-allowed' : ''
+              }`} disabled={deletingChatId === contextMenu.chatId}>
+              {deletingChatId === contextMenu.chatId ? 'Copying...' : 'Copy context to new chat'}
+            </button>
+            <button 
+              onClick={handleDeleteFromMenu} 
+              className={`block w-full px-4 py-2 text-left hover:bg-gray-100 ${
+                deletingChatId === contextMenu.chatId ? 'text-gray-400 cursor-not-allowed' : 'text-red-600'
+              }`}
+              disabled={deletingChatId === contextMenu.chatId}
+            >
+              {deletingChatId === contextMenu.chatId ? 'Deleting...' : 'Delete'}
+            </button>
           </div>
         )}
-      </aside>
-      {/* Overlay when sidebar is open on small screens */}
-      {typeof window !== 'undefined' && window.innerWidth < 800 && sidebarOpen && (
+
+
+              </aside>
+
+        {/* Overlay when sidebar is open on small screens */}
+      {isClient && window.innerWidth < 800 && sidebarOpen && (
         <div
           className="fixed inset-0 bg-black bg-opacity-40 z-[99998] pointer-events-auto"
           onClick={() => setSidebarOpen(false)}
         />
       )}
+      
+      {/* Model Settings Popup (always render, even if sidebar is collapsed) */}
+      {showSettingsPopup && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={handleCloseSettings}>
+          <div 
+            className="flex flex-col max-h-[480px] min-h-[480px] w-[638px] bg-white rounded-xl shadow-xl" 
+            style={sidebarOpen ? { marginLeft: 245 } : {}} // Offset if sidebar is open
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Content */}
+            <div className="flex-1 p-6">
+              <ChatSettings
+                ref={chatSettingsRef}
+                selectedModelType={selectedModelType}
+                selectedModel={selectedModel}
+                isAsyncMode={isAsyncMode}
+                onModelChange={onModelChange || (() => {})}
+                onModeChange={onModeChange || (() => {})}
+                onClose={handleCloseSettings}
+                onSave={handleSaveSettings}
+                onCancel={handleCloseSettings}
+                availableModels={availableModels}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Search Popup (always render, even if sidebar is expanded) */}
       {showSearch && (
         <div
@@ -827,7 +1206,7 @@ export default function ChatHistory({
         >
           <div
             className={`flex flex-col max-h-[480px] min-h-[480px] w-[638px] bg-white rounded-xl shadow-xl`}
-            style={sidebarOpen && !sidebarCollapsed ? { marginLeft: 245 } : {}} // Offset if sidebar is open
+            style={sidebarOpen ? { marginLeft: 245 } : {}} // Offset if sidebar is open
             onClick={e => e.stopPropagation()}
           >
             {/* Input row */}
@@ -884,7 +1263,7 @@ export default function ChatHistory({
                             onClick={() => { onStartNewChat?.(); setShowSearch(false); }}
                             onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { onStartNewChat?.(); setShowSearch(false); } }}
                           >
-                            <MessageSquare className="w-5 h-5 text-gray-700" />
+                             {/* Removed chat icon */}
                             <div className="relative grow overflow-hidden whitespace-nowrap ps-2">
                               <div className="text-sm truncate text-black">{chat.title}</div>
                               {chat.lastMessage && (

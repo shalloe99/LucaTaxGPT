@@ -1,0 +1,1098 @@
+[
+  {
+    "id": "eac5c865-5a09-458f-898d-5bc362047b2c",
+    "userId": "demo-user",
+    "title": "New Conversation",
+    "contextFilters": {
+      "stateTaxCodes": [],
+      "profileTags": []
+    },
+    "messages": [
+      {
+        "id": "1754891022814g0x4g4gwenv",
+        "role": "user",
+        "content": "hey",
+        "timestamp": "2025-08-11T05:43:42.814Z",
+        "status": "complete",
+        "parentUserId": null,
+        "assistantVariants": [
+          "17548910228142bi34ahfd8q"
+        ]
+      },
+      {
+        "id": "17548910228142bi34ahfd8q",
+        "role": "assistant",
+        "content": "Hello! How can I help you today?",
+        "timestamp": "2025-08-11T05:43:49.372Z",
+        "status": "complete",
+        "parentUserId": "1754891022814g0x4g4gwenv"
+      }
+    ],
+    "commits": [
+      {
+        "id": "384ad786-4622-4d04-8776-5b6c1b537db4",
+        "parentId": null,
+        "message": {
+          "id": "1754891022814g0x4g4gwenv",
+          "role": "user",
+          "content": "hey",
+          "timestamp": "2025-08-11T05:43:42.814Z",
+          "status": "complete",
+          "parentUserId": null
+        },
+        "metadata": {
+          "action": "new",
+          "amendedFromCommitId": null,
+          "rebased": false,
+          "final": false
+        },
+        "createdAt": "2025-08-11T05:43:42.814Z"
+      },
+      {
+        "id": "7eb8f405-6a9f-4400-877d-c9659876f7b9",
+        "parentId": "384ad786-4622-4d04-8776-5b6c1b537db4",
+        "message": {
+          "id": "17548910228142bi34ahfd8q",
+          "role": "assistant",
+          "content": "Hello! How can I help you today?",
+          "timestamp": "2025-08-11T05:43:49.372Z",
+          "status": "complete",
+          "parentUserId": "1754891022814g0x4g4gwenv"
+        },
+        "metadata": {
+          "action": "amend",
+          "amendedFromCommitId": null,
+          "rebased": false,
+          "final": true
+        },
+        "createdAt": "2025-08-11T05:43:49.373Z"
+      }
+    ],
+    "headCommitId": "7eb8f405-6a9f-4400-877d-c9659876f7b9",
+    "createdAt": "2025-08-11T05:43:41.224Z",
+    "updatedAt": "2025-08-11T05:43:49.373Z"
+  },
+  {
+    "id": "26822099-cb0b-41f0-9ac5-a444070b06ab",
+    "userId": "demo-user",
+    "title": "New Conversation",
+    "contextFilters": {
+      "stateTaxCodes": [],
+      "profileTags": []
+    },
+    "messages": [
+      {
+        "id": "17548895354618axsxk8fkl5",
+        "role": "user",
+        "content": "hey",
+        "timestamp": "2025-08-11T05:18:55.461Z",
+        "status": "complete",
+        "parentUserId": null,
+        "assistantVariants": [
+          "1754889535461fgn5tn36hcr"
+        ]
+      },
+      {
+        "id": "1754889535461fgn5tn36hcr",
+        "role": "assistant",
+        "content": "Hello! How can I help you today?",
+        "timestamp": "2025-08-11T05:19:03.520Z",
+        "status": "complete",
+        "parentUserId": "17548895354618axsxk8fkl5"
+      }
+    ],
+    "commits": [
+      {
+        "id": "fb0e79cd-aacd-42e7-adab-5d1716e13e74",
+        "parentId": null,
+        "message": {
+          "id": "17548895354618axsxk8fkl5",
+          "role": "user",
+          "content": "hey",
+          "timestamp": "2025-08-11T05:18:55.461Z",
+          "status": "complete",
+          "parentUserId": null
+        },
+        "metadata": {
+          "action": "new",
+          "amendedFromCommitId": null,
+          "rebased": false,
+          "final": false
+        },
+        "createdAt": "2025-08-11T05:18:55.461Z"
+      },
+      {
+        "id": "cb988529-842e-47de-aab9-a8d5f1edd411",
+        "parentId": "fb0e79cd-aacd-42e7-adab-5d1716e13e74",
+        "message": {
+          "id": "1754889535461fgn5tn36hcr",
+          "role": "assistant",
+          "content": "Hello! How can I help you today?",
+          "timestamp": "2025-08-11T05:19:03.520Z",
+          "status": "complete",
+          "parentUserId": "17548895354618axsxk8fkl5"
+        },
+        "metadata": {
+          "action": "amend",
+          "amendedFromCommitId": null,
+          "rebased": false,
+          "final": true
+        },
+        "createdAt": "2025-08-11T05:19:03.520Z"
+      }
+    ],
+    "headCommitId": "cb988529-842e-47de-aab9-a8d5f1edd411",
+    "createdAt": "2025-08-11T05:18:53.911Z",
+    "updatedAt": "2025-08-11T05:19:03.520Z"
+  },
+  {
+    "id": "6a7fd042-919a-4ce0-a2e4-f0477c041462",
+    "userId": "demo-user",
+    "title": "New Conversation",
+    "contextFilters": {
+      "stateTaxCodes": [],
+      "profileTags": []
+    },
+    "messages": [
+      {
+        "id": "1754887545482adiayfm4wcd",
+        "role": "user",
+        "content": "hei",
+        "timestamp": "2025-08-11T04:45:45.482Z",
+        "status": "complete",
+        "parentUserId": null,
+        "assistantVariants": [
+          "1754887545482ftapbg59z69"
+        ]
+      },
+      {
+        "id": "1754887545482ftapbg59z69",
+        "role": "assistant",
+        "content": "Hello! How can I help you today? If there's anything specific on your mind, feel free to share. Whether it’s a query or just seeking some conversation, I'm here for you. Remember, taking care of yourself is important too—make sure to check in with how you're feeling emotionally and mentally as well!",
+        "timestamp": "2025-08-11T04:46:02.348Z",
+        "status": "complete",
+        "parentUserId": "1754887545482adiayfm4wcd"
+      }
+    ],
+    "commits": [
+      {
+        "id": "a474bfe8-a29b-47a7-a56a-341c3483c67f",
+        "parentId": null,
+        "message": {
+          "id": "1754887545482adiayfm4wcd",
+          "role": "user",
+          "content": "hei",
+          "timestamp": "2025-08-11T04:45:45.482Z",
+          "status": "complete",
+          "parentUserId": null
+        },
+        "metadata": {
+          "action": "new",
+          "amendedFromCommitId": null,
+          "rebased": false,
+          "final": false
+        },
+        "createdAt": "2025-08-11T04:45:45.482Z"
+      },
+      {
+        "id": "8bf28c7a-1a78-4275-b01a-23d61c89e12e",
+        "parentId": "a474bfe8-a29b-47a7-a56a-341c3483c67f",
+        "message": {
+          "id": "1754887545482ftapbg59z69",
+          "role": "assistant",
+          "content": "Hello! How can I help you today? If there's anything specific on your mind, feel free to share. Whether it’s a query or just seeking some conversation, I'm here for you. Remember, taking care of yourself is important too—make sure to check in with how you're feeling emotionally and mentally as well!",
+          "timestamp": "2025-08-11T04:46:02.348Z",
+          "status": "complete",
+          "parentUserId": "1754887545482adiayfm4wcd"
+        },
+        "metadata": {
+          "action": "amend",
+          "amendedFromCommitId": null,
+          "rebased": false,
+          "final": true
+        },
+        "createdAt": "2025-08-11T04:46:02.349Z"
+      }
+    ],
+    "headCommitId": "8bf28c7a-1a78-4275-b01a-23d61c89e12e",
+    "createdAt": "2025-08-11T04:45:43.892Z",
+    "updatedAt": "2025-08-11T05:12:32.636Z"
+  },
+  {
+    "id": "44a46b4a-3436-4cbb-981b-fd4d9ae5ea43",
+    "userId": "demo-user",
+    "title": "New Conversation",
+    "contextFilters": {
+      "stateTaxCodes": [],
+      "profileTags": []
+    },
+    "messages": [
+      {
+        "id": "1754883199850c8ev12d2i0e",
+        "role": "user",
+        "content": "hellp",
+        "timestamp": "2025-08-11T03:33:19.850Z",
+        "status": "complete",
+        "parentUserId": null,
+        "assistantVariants": [
+          "1754883199850lemm1plr2h",
+          "1754883222171hacexqaw2bc",
+          "1754883784780l381vch331c",
+          "1754883850992152p6mwih7n"
+        ]
+      },
+      {
+        "id": "1754883199850lemm1plr2h",
+        "role": "assistant",
+        "content": "It appears that the input you provided, \"hellp,\" is a truncated or incomplete word. If this was intended to be an imperative sentence requesting help (as it starts with \"Hell\" which might suggest urgency), then one possible completion could be:\n\n\"Help!\" This would indicate someone in need of immediate assistance and the capitalization on 'H' intensifies the sense of emergency or exclamation. If this does not meet your requirement, please provide additional context for a more accurate response.",
+        "timestamp": "2025-08-11T03:33:39.804Z",
+        "status": "complete",
+        "parentUserId": "1754883199850c8ev12d2i0e"
+      },
+      {
+        "id": "1754883222171hacexqaw2bc",
+        "role": "assistant",
+        "content": "",
+        "timestamp": "2025-08-11T03:33:42.173Z",
+        "status": "complete",
+        "parentUserId": "1754883199850c8ev12d2i0e"
+      },
+      {
+        "id": "1754883784780l381vch331c",
+        "role": "assistant",
+        "content": "",
+        "timestamp": "2025-08-11T03:43:04.782Z",
+        "status": "complete",
+        "parentUserId": "1754883199850c8ev12d2i0e"
+      },
+      {
+        "id": "1754883850992152p6mwih7n",
+        "role": "assistant",
+        "content": "",
+        "timestamp": "2025-08-11T03:44:10.993Z",
+        "status": "complete",
+        "parentUserId": "1754883199850c8ev12d2i0e"
+      },
+      {
+        "id": "17548840116165bv9xrwr0sm",
+        "role": "user",
+        "content": "hello again",
+        "timestamp": "2025-08-11T03:46:51.616Z",
+        "status": "complete",
+        "parentUserId": null,
+        "assistantVariants": [
+          "17548840116160y3g2bvg69se",
+          "17548840290512yr7i05w0cb"
+        ]
+      },
+      {
+        "id": "17548840116160y3g2bvg69se",
+        "role": "assistant",
+        "content": "Hello! I'm glad to assist you once more. How can I help?",
+        "timestamp": "2025-08-11T03:47:02.455Z",
+        "status": "complete",
+        "parentUserId": "17548840116165bv9xrwr0sm"
+      },
+      {
+        "id": "17548840290512yr7i05w0cb",
+        "role": "assistant",
+        "content": " Hello! How can I assist you today? If you have any questions or need help with something, feel free to ask. I'm here to help. Is there anything specific that you would like me to work on for you?\n\nAlso, if you want to test my capabilities, I can perform a variety of tasks such as answering questions, providing information, generating creative writing, helping with homework, and much more. Let me know what you need!",
+        "timestamp": "2025-08-11T03:47:41.068Z",
+        "status": "complete",
+        "parentUserId": "17548840116165bv9xrwr0sm"
+      }
+    ],
+    "commits": [
+      {
+        "id": "894203d0-f580-4723-8a4a-70db0cbe4e5a",
+        "parentId": null,
+        "message": {
+          "id": "1754883199850c8ev12d2i0e",
+          "role": "user",
+          "content": "hellp",
+          "timestamp": "2025-08-11T03:33:19.850Z",
+          "status": "complete",
+          "parentUserId": null
+        },
+        "metadata": {
+          "action": "new",
+          "amendedFromCommitId": null,
+          "rebased": false,
+          "final": false
+        },
+        "createdAt": "2025-08-11T03:33:19.850Z"
+      },
+      {
+        "id": "2721a9e3-b62e-4f37-8aea-6fa751af4c43",
+        "parentId": "894203d0-f580-4723-8a4a-70db0cbe4e5a",
+        "message": {
+          "id": "1754883199850lemm1plr2h",
+          "role": "assistant",
+          "content": "It appears that the input you provided, \"hellp,\" is a truncated or incomplete word. If this was intended to be an imperative sentence requesting help (as it starts with \"Hell\" which might suggest urgency), then one possible completion could be:\n\n\"Help!\" This would indicate someone in need of immediate assistance and the capitalization on 'H' intensifies the sense of emergency or exclamation. If this does not meet your requirement, please provide additional context for a more accurate response.",
+          "timestamp": "2025-08-11T03:33:39.804Z",
+          "status": "complete",
+          "parentUserId": "1754883199850c8ev12d2i0e"
+        },
+        "metadata": {
+          "action": "amend",
+          "amendedFromCommitId": null,
+          "rebased": false,
+          "final": true
+        },
+        "createdAt": "2025-08-11T03:33:39.804Z"
+      },
+      {
+        "id": "1fb70710-8d58-4a15-8575-54bfb039bfce",
+        "parentId": "2721a9e3-b62e-4f37-8aea-6fa751af4c43",
+        "message": {
+          "id": "1754883222171hacexqaw2bc",
+          "role": "assistant",
+          "content": "",
+          "timestamp": "2025-08-11T03:33:42.173Z",
+          "status": "complete",
+          "parentUserId": "1754883199850c8ev12d2i0e"
+        },
+        "metadata": {
+          "action": "amend",
+          "amendedFromCommitId": null,
+          "rebased": false,
+          "final": true
+        },
+        "createdAt": "2025-08-11T03:33:42.174Z"
+      },
+      {
+        "id": "1f0f73da-dfe9-475b-9d1d-b1506ebe1f77",
+        "parentId": "1fb70710-8d58-4a15-8575-54bfb039bfce",
+        "message": {
+          "id": "1754883784780l381vch331c",
+          "role": "assistant",
+          "content": "",
+          "timestamp": "2025-08-11T03:43:04.782Z",
+          "status": "complete",
+          "parentUserId": "1754883199850c8ev12d2i0e"
+        },
+        "metadata": {
+          "action": "amend",
+          "amendedFromCommitId": null,
+          "rebased": false,
+          "final": true
+        },
+        "createdAt": "2025-08-11T03:43:04.782Z"
+      },
+      {
+        "id": "48880f26-932e-410d-ad4d-2367466e5579",
+        "parentId": "1f0f73da-dfe9-475b-9d1d-b1506ebe1f77",
+        "message": {
+          "id": "1754883850992152p6mwih7n",
+          "role": "assistant",
+          "content": "",
+          "timestamp": "2025-08-11T03:44:10.993Z",
+          "status": "complete",
+          "parentUserId": "1754883199850c8ev12d2i0e"
+        },
+        "metadata": {
+          "action": "amend",
+          "amendedFromCommitId": null,
+          "rebased": false,
+          "final": true
+        },
+        "createdAt": "2025-08-11T03:44:10.993Z"
+      },
+      {
+        "id": "0180e8b5-b0d8-4c52-8963-231849b98556",
+        "parentId": "48880f26-932e-410d-ad4d-2367466e5579",
+        "message": {
+          "id": "17548840116165bv9xrwr0sm",
+          "role": "user",
+          "content": "hello again",
+          "timestamp": "2025-08-11T03:46:51.616Z",
+          "status": "complete",
+          "parentUserId": null
+        },
+        "metadata": {
+          "action": "new",
+          "amendedFromCommitId": null,
+          "rebased": false,
+          "final": false
+        },
+        "createdAt": "2025-08-11T03:46:51.616Z"
+      },
+      {
+        "id": "651222f6-02b2-429c-8bd0-8fb04b8f564b",
+        "parentId": "0180e8b5-b0d8-4c52-8963-231849b98556",
+        "message": {
+          "id": "17548840116160y3g2bvg69se",
+          "role": "assistant",
+          "content": "Hello! I'm glad to assist you once more. How can I help?",
+          "timestamp": "2025-08-11T03:47:02.455Z",
+          "status": "complete",
+          "parentUserId": "17548840116165bv9xrwr0sm"
+        },
+        "metadata": {
+          "action": "amend",
+          "amendedFromCommitId": null,
+          "rebased": false,
+          "final": true
+        },
+        "createdAt": "2025-08-11T03:47:02.455Z"
+      },
+      {
+        "id": "f47a4cd7-23bd-4744-820b-0c068e92888b",
+        "parentId": "651222f6-02b2-429c-8bd0-8fb04b8f564b",
+        "message": {
+          "id": "17548840290512yr7i05w0cb",
+          "role": "assistant",
+          "content": " Hello! How can I assist you today? If you have any questions or need help with something, feel free to ask. I'm here to help. Is there anything specific that you would like me to work on for you?\n\nAlso, if you want to test my capabilities, I can perform a variety of tasks such as answering questions, providing information, generating creative writing, helping with homework, and much more. Let me know what you need!",
+          "timestamp": "2025-08-11T03:47:41.068Z",
+          "status": "complete",
+          "parentUserId": "17548840116165bv9xrwr0sm"
+        },
+        "metadata": {
+          "action": "amend",
+          "amendedFromCommitId": null,
+          "rebased": false,
+          "final": true
+        },
+        "createdAt": "2025-08-11T03:47:41.068Z"
+      }
+    ],
+    "headCommitId": "f47a4cd7-23bd-4744-820b-0c068e92888b",
+    "createdAt": "2025-08-11T03:33:18.257Z",
+    "updatedAt": "2025-08-11T05:12:14.332Z"
+  },
+  {
+    "id": "06f6220b-bbc0-4ff5-bd38-483b4ff36ec5",
+    "userId": "demo-user",
+    "title": "New Conversation",
+    "contextFilters": {
+      "stateTaxCodes": [],
+      "profileTags": []
+    },
+    "messages": [
+      {
+        "id": "175487389431094dgmcxcj1w",
+        "role": "user",
+        "content": "again",
+        "timestamp": "2025-08-11T00:58:14.310Z",
+        "status": "complete",
+        "parentUserId": null,
+        "assistantVariants": [
+          "1754873894310wi1q8qy0y",
+          "175487393121789azw6iu4oa",
+          "1754877517691bgmhr2dk36f"
+        ]
+      },
+      {
+        "id": "1754873894310wi1q8qy0y",
+        "role": "assistant",
+        "content": "Certainly! It seems like you're asking to repeat the word \"again.\" Here it is again: again. If there was a specific context or action preceding this request, please provide additional details so I can assist more effectively in line with your original intent. Otherwise, if simply echoing back the concept of repetition is what’s needed, then we've accomplished that here!",
+        "timestamp": "2025-08-11T00:58:36.117Z",
+        "status": "complete",
+        "parentUserId": "175487389431094dgmcxcj1w"
+      },
+      {
+        "id": "175487393121789azw6iu4oa",
+        "role": "assistant",
+        "content": "Should you have any other task to carry out repeatedly, feel free to let me know how I may repeat or replicate it for you as well.",
+        "timestamp": "2025-08-11T00:59:03.915Z",
+        "status": "complete",
+        "parentUserId": "175487389431094dgmcxcj1w"
+      },
+      {
+        "id": "1754877517691bgmhr2dk36f",
+        "role": "assistant",
+        "content": "------",
+        "timestamp": "2025-08-11T01:58:45.599Z",
+        "status": "complete",
+        "parentUserId": "175487389431094dgmcxcj1w"
+      }
+    ],
+    "commits": [
+      {
+        "id": "05d08ad6-3470-437a-ac73-71ba15ddeace",
+        "parentId": null,
+        "message": {
+          "id": "175487389431094dgmcxcj1w",
+          "role": "user",
+          "content": "again",
+          "timestamp": "2025-08-11T00:58:14.310Z",
+          "status": "complete",
+          "parentUserId": null
+        },
+        "metadata": {
+          "action": "new",
+          "amendedFromCommitId": null,
+          "rebased": false,
+          "final": false
+        },
+        "createdAt": "2025-08-11T00:58:14.310Z"
+      },
+      {
+        "id": "540bf924-5dba-4245-b3d8-53dcc283f6cf",
+        "parentId": "05d08ad6-3470-437a-ac73-71ba15ddeace",
+        "message": {
+          "id": "1754873894310wi1q8qy0y",
+          "role": "assistant",
+          "content": "Certainly! It seems like you're asking to repeat the word \"again.\" Here it is again: again. If there was a specific context or action preceding this request, please provide additional details so I can assist more effectively in line with your original intent. Otherwise, if simply echoing back the concept of repetition is what’s needed, then we've accomplished that here!",
+          "timestamp": "2025-08-11T00:58:36.117Z",
+          "status": "complete",
+          "parentUserId": "175487389431094dgmcxcj1w"
+        },
+        "metadata": {
+          "action": "amend",
+          "amendedFromCommitId": null,
+          "rebased": false,
+          "final": true
+        },
+        "createdAt": "2025-08-11T00:58:36.117Z"
+      },
+      {
+        "id": "3feb366c-a253-4727-8ba0-19b963692eb1",
+        "parentId": "540bf924-5dba-4245-b3d8-53dcc283f6cf",
+        "message": {
+          "id": "175487393121789azw6iu4oa",
+          "role": "assistant",
+          "content": "Should you have any other task to carry out repeatedly, feel free to let me know how I may repeat or replicate it for you as well.",
+          "timestamp": "2025-08-11T00:59:03.915Z",
+          "status": "complete",
+          "parentUserId": "175487389431094dgmcxcj1w"
+        },
+        "metadata": {
+          "action": "amend",
+          "amendedFromCommitId": null,
+          "rebased": false,
+          "final": true
+        },
+        "createdAt": "2025-08-11T00:59:03.916Z"
+      },
+      {
+        "id": "dba1ab62-14c9-4b2d-82e7-6dd71d64acdc",
+        "parentId": "3feb366c-a253-4727-8ba0-19b963692eb1",
+        "message": {
+          "id": "1754877517691bgmhr2dk36f",
+          "role": "assistant",
+          "content": "------",
+          "timestamp": "2025-08-11T01:58:45.599Z",
+          "status": "complete",
+          "parentUserId": "175487389431094dgmcxcj1w"
+        },
+        "metadata": {
+          "action": "amend",
+          "amendedFromCommitId": null,
+          "rebased": false,
+          "final": true
+        },
+        "createdAt": "2025-08-11T01:58:45.599Z"
+      }
+    ],
+    "headCommitId": "dba1ab62-14c9-4b2d-82e7-6dd71d64acdc",
+    "createdAt": "2025-08-11T00:58:12.730Z",
+    "updatedAt": "2025-08-11T03:33:34.994Z"
+  },
+  {
+    "id": "8feeb9d6-a64c-4fb9-a9cb-76fba595202b",
+    "userId": "demo-user",
+    "title": "New Conversation",
+    "contextFilters": {
+      "stateTaxCodes": [],
+      "profileTags": []
+    },
+    "messages": [
+      {
+        "id": "1754873596131vc2rmz93ut",
+        "role": "user",
+        "content": "testing a transition",
+        "timestamp": "2025-08-11T00:53:16.131Z",
+        "status": "complete",
+        "parentUserId": null,
+        "assistantVariants": [
+          "17548735961310n5jmul9q1j"
+        ]
+      },
+      {
+        "id": "17548735961310n5jmul9q1j",
+        "role": "assistant",
+        "content": "Testing the performance and stability of a hardware or software component during transitions between different states, such as from standby to active mode, is crucial for ensnery and reliability. Here's how you might test these critical points:\n\n1. Define Test Goals: Clearly identify what aspects need testing (e.g., power on time, data integrity during state changes).\n2. Set Up the Environment: Prepare a controlled environment where variables can be monitored and adjustments made without external interference.\n3. Develop Test Cases: Create scenarios that mimic real-world transitions between states (e.g., turning on/off, entering standby mode).\n4. Execute the Tests: Run each test case while monitoring performance metrics like transition time and error rates using specialized software tools or embedded sensors.\n5. Analyze Results: Evaluate data for consistency with design expectations (e.g., no errors during state transitions) to ensure reliability. Look out for anomalies that might indicate potential failure points.\n6. Refine Based on Findings: Modify the hardware or software based on test results and retest as needed until performance meets required standards, ensuring a robust transition experience.",
+        "timestamp": "2025-08-11T00:54:02.599Z",
+        "status": "complete",
+        "parentUserId": "1754873596131vc2rmz93ut"
+      }
+    ],
+    "commits": [
+      {
+        "id": "f0a867c5-2d7b-4f32-a2df-a9741e6089eb",
+        "parentId": null,
+        "message": {
+          "id": "1754873596131vc2rmz93ut",
+          "role": "user",
+          "content": "testing a transition",
+          "timestamp": "2025-08-11T00:53:16.131Z",
+          "status": "complete",
+          "parentUserId": null
+        },
+        "metadata": {
+          "action": "new",
+          "amendedFromCommitId": null,
+          "rebased": false,
+          "final": false
+        },
+        "createdAt": "2025-08-11T00:53:16.131Z"
+      },
+      {
+        "id": "a0017d4b-5c70-46bb-9845-0a6fc0b91b06",
+        "parentId": "f0a867c5-2d7b-4f32-a2df-a9741e6089eb",
+        "message": {
+          "id": "17548735961310n5jmul9q1j",
+          "role": "assistant",
+          "content": "Testing the performance and stability of a hardware or software component during transitions between different states, such as from standby to active mode, is crucial for ensnery and reliability. Here's how you might test these critical points:\n\n1. Define Test Goals: Clearly identify what aspects need testing (e.g., power on time, data integrity during state changes).\n2. Set Up the Environment: Prepare a controlled environment where variables can be monitored and adjustments made without external interference.\n3. Develop Test Cases: Create scenarios that mimic real-world transitions between states (e.g., turning on/off, entering standby mode).\n4. Execute the Tests: Run each test case while monitoring performance metrics like transition time and error rates using specialized software tools or embedded sensors.\n5. Analyze Results: Evaluate data for consistency with design expectations (e.g., no errors during state transitions) to ensure reliability. Look out for anomalies that might indicate potential failure points.\n6. Refine Based on Findings: Modify the hardware or software based on test results and retest as needed until performance meets required standards, ensuring a robust transition experience.",
+          "timestamp": "2025-08-11T00:54:02.599Z",
+          "status": "complete",
+          "parentUserId": "1754873596131vc2rmz93ut"
+        },
+        "metadata": {
+          "action": "amend",
+          "amendedFromCommitId": null,
+          "rebased": false,
+          "final": true
+        },
+        "createdAt": "2025-08-11T00:54:02.599Z"
+      }
+    ],
+    "headCommitId": "a0017d4b-5c70-46bb-9845-0a6fc0b91b06",
+    "createdAt": "2025-08-11T00:53:14.547Z",
+    "updatedAt": "2025-08-11T05:08:49.660Z"
+  },
+  {
+    "id": "7998e371-5016-46b1-b44a-07b9ca6b9a85",
+    "userId": "demo-user",
+    "title": "New Conversation",
+    "contextFilters": {
+      "stateTaxCodes": [],
+      "profileTags": []
+    },
+    "messages": [
+      {
+        "id": "17548727940877z9dmis02ac",
+        "role": "user",
+        "content": "send message",
+        "timestamp": "2025-08-11T00:39:54.087Z",
+        "status": "complete",
+        "parentUserId": null,
+        "assistantVariants": [
+          "1754872794087h935yc9t6vn"
+        ]
+      },
+      {
+        "id": "1754872794087h935yc9t6vn",
+        "role": "assistant",
+        "content": "To send a message, you can use various platforms depending on your needs. Here's an example of how to compose and send a simple text message using Python with the `smtplib` library for email:\n\n```python\nimport smtplib\nfrom email.message import EmailMessage\n\ndef send_email(subject, content, recipient_email):\n    msg = EmailMessage()\n    \n    # Set up sender and receiver details \n    msg['Subject'] = subject\n    msg.set_content(content)\n    msg['From'] = 'your-email@example.com'\n    msg['To'] = recipientnermail\n    \n    try:\n        with smtplib.SMTP_SSL('smtp.example.com', 465) as server: # Replace SMTP service and port number accordingly (e.g., Gmail, Outlook)...\n            server.login(msg['From'], 'your-password') # Provide your email login credentials securely...\n            server.send_message(msg)\n        print(\"Message sent successfully.\")\n    except Exception as e:\n        print(f\"Failed to send message with error: {e}\")\n        \n# Replace these variables accordingly before calling the function \nsubject = \"Hello!\"\ncontent = \"This is a test message.\"\nrecipient_email = \"friend-or-family@example.com\"\nsend_email(subject, content, recipient_email)\n```\nRemember to replace placeholder values with actual details and ensure the login credentials are secured using environment variables or another secure method if they're not hardcoded in a script for simplicity here.",
+        "timestamp": "2025-08-11T00:40:55.964Z",
+        "status": "complete",
+        "parentUserId": "17548727940877z9dmis02ac"
+      }
+    ],
+    "commits": [
+      {
+        "id": "3dd607a0-e6af-451a-b4aa-32cf16650f62",
+        "parentId": null,
+        "message": {
+          "id": "17548727940877z9dmis02ac",
+          "role": "user",
+          "content": "send message",
+          "timestamp": "2025-08-11T00:39:54.087Z",
+          "status": "complete",
+          "parentUserId": null
+        },
+        "metadata": {
+          "action": "new",
+          "amendedFromCommitId": null,
+          "rebased": false,
+          "final": false
+        },
+        "createdAt": "2025-08-11T00:39:54.087Z"
+      },
+      {
+        "id": "561025b8-f80d-4d75-8e23-08d53825cb80",
+        "parentId": "3dd607a0-e6af-451a-b4aa-32cf16650f62",
+        "message": {
+          "id": "1754872794087h935yc9t6vn",
+          "role": "assistant",
+          "content": "To send a message, you can use various platforms depending on your needs. Here's an example of how to compose and send a simple text message using Python with the `smtplib` library for email:\n\n```python\nimport smtplib\nfrom email.message import EmailMessage\n\ndef send_email(subject, content, recipient_email):\n    msg = EmailMessage()\n    \n    # Set up sender and receiver details \n    msg['Subject'] = subject\n    msg.set_content(content)\n    msg['From'] = 'your-email@example.com'\n    msg['To'] = recipientnermail\n    \n    try:\n        with smtplib.SMTP_SSL('smtp.example.com', 465) as server: # Replace SMTP service and port number accordingly (e.g., Gmail, Outlook)...\n            server.login(msg['From'], 'your-password') # Provide your email login credentials securely...\n            server.send_message(msg)\n        print(\"Message sent successfully.\")\n    except Exception as e:\n        print(f\"Failed to send message with error: {e}\")\n        \n# Replace these variables accordingly before calling the function \nsubject = \"Hello!\"\ncontent = \"This is a test message.\"\nrecipient_email = \"friend-or-family@example.com\"\nsend_email(subject, content, recipient_email)\n```\nRemember to replace placeholder values with actual details and ensure the login credentials are secured using environment variables or another secure method if they're not hardcoded in a script for simplicity here.",
+          "timestamp": "2025-08-11T00:40:55.964Z",
+          "status": "complete",
+          "parentUserId": "17548727940877z9dmis02ac"
+        },
+        "metadata": {
+          "action": "amend",
+          "amendedFromCommitId": null,
+          "rebased": false,
+          "final": true
+        },
+        "createdAt": "2025-08-11T00:40:55.964Z"
+      }
+    ],
+    "headCommitId": "561025b8-f80d-4d75-8e23-08d53825cb80",
+    "createdAt": "2025-08-11T00:39:52.506Z",
+    "updatedAt": "2025-08-11T00:45:04.567Z"
+  },
+  {
+    "id": "723f9c19-4a14-4885-80d3-26e66a5a8878",
+    "userId": "demo-user",
+    "title": "New Conversation",
+    "contextFilters": {
+      "stateTaxCodes": [],
+      "profileTags": []
+    },
+    "messages": [
+      {
+        "id": "17548724208013i8tcknqe5o",
+        "role": "user",
+        "content": "hey",
+        "timestamp": "2025-08-11T00:33:40.801Z",
+        "status": "complete",
+        "parentUserId": null,
+        "assistantVariants": [
+          "17548724208013sdiv16ugtn"
+        ]
+      },
+      {
+        "id": "17548724208013sdiv16ugtn",
+        "role": "assistant",
+        "content": "Hey there! How can I help you today?",
+        "timestamp": "2025-08-11T00:33:48.606Z",
+        "status": "complete",
+        "parentUserId": "17548724208013i8tcknqe5o"
+      },
+      {
+        "id": "17548725476854qprsbu2qzq",
+        "role": "user",
+        "content": "live long and prosperous",
+        "timestamp": "2025-08-11T00:35:47.685Z",
+        "status": "complete",
+        "parentUserId": null,
+        "assistantVariants": [
+          "1754872547685o5afrvk5fy"
+        ]
+      },
+      {
+        "id": "1754872547685o5afrvk5fy",
+        "role": "assistant",
+        "content": "I'm thrilled to hear that, wishing you the very best on your journey ahead. Remember, a cheerful heart is like medicine; it not only cures but also prevents illness. If there’s anything specific I can assist you with or any advice you seek for maintaining good health and happiness, feel free to ask!",
+        "timestamp": "2025-08-11T00:36:04.316Z",
+        "status": "complete",
+        "parentUserId": "17548725476854qprsbu2qzq"
+      }
+    ],
+    "commits": [
+      {
+        "id": "9b90b84f-1c89-47f6-9a01-95c996e37511",
+        "parentId": null,
+        "message": {
+          "id": "17548724208013i8tcknqe5o",
+          "role": "user",
+          "content": "hey",
+          "timestamp": "2025-08-11T00:33:40.801Z",
+          "status": "complete",
+          "parentUserId": null
+        },
+        "metadata": {
+          "action": "new",
+          "amendedFromCommitId": null,
+          "rebased": false,
+          "final": false
+        },
+        "createdAt": "2025-08-11T00:33:40.801Z"
+      },
+      {
+        "id": "bc262643-0a33-4b53-8811-c21dbabbc0aa",
+        "parentId": "9b90b84f-1c89-47f6-9a01-95c996e37511",
+        "message": {
+          "id": "17548724208013sdiv16ugtn",
+          "role": "assistant",
+          "content": "Hey there! How can I help you today?",
+          "timestamp": "2025-08-11T00:33:48.606Z",
+          "status": "complete",
+          "parentUserId": "17548724208013i8tcknqe5o"
+        },
+        "metadata": {
+          "action": "amend",
+          "amendedFromCommitId": null,
+          "rebased": false,
+          "final": true
+        },
+        "createdAt": "2025-08-11T00:33:48.607Z"
+      },
+      {
+        "id": "9ea08ccd-74b8-475a-aa08-6a2fa8eda590",
+        "parentId": "bc262643-0a33-4b53-8811-c21dbabbc0aa",
+        "message": {
+          "id": "17548725476854qprsbu2qzq",
+          "role": "user",
+          "content": "live long and prosperous",
+          "timestamp": "2025-08-11T00:35:47.685Z",
+          "status": "complete",
+          "parentUserId": null
+        },
+        "metadata": {
+          "action": "new",
+          "amendedFromCommitId": null,
+          "rebased": false,
+          "final": false
+        },
+        "createdAt": "2025-08-11T00:35:47.685Z"
+      },
+      {
+        "id": "a1fb5d0a-546e-4703-8897-512a2f32f52d",
+        "parentId": "9ea08ccd-74b8-475a-aa08-6a2fa8eda590",
+        "message": {
+          "id": "1754872547685o5afrvk5fy",
+          "role": "assistant",
+          "content": "I'm thrilled to hear that, wishing you the very best on your journey ahead. Remember, a cheerful heart is like medicine; it not only cures but also prevents illness. If there’s anything specific I can assist you with or any advice you seek for maintaining good health and happiness, feel free to ask!",
+          "timestamp": "2025-08-11T00:36:04.316Z",
+          "status": "complete",
+          "parentUserId": "17548725476854qprsbu2qzq"
+        },
+        "metadata": {
+          "action": "amend",
+          "amendedFromCommitId": null,
+          "rebased": false,
+          "final": true
+        },
+        "createdAt": "2025-08-11T00:36:04.316Z"
+      }
+    ],
+    "headCommitId": "a1fb5d0a-546e-4703-8897-512a2f32f52d",
+    "createdAt": "2025-08-11T00:33:39.255Z",
+    "updatedAt": "2025-08-11T05:08:46.420Z"
+  },
+  {
+    "id": "a22b456b-8369-4e34-a900-415640b7cbe6",
+    "userId": "demo-user",
+    "title": "Tax Deductions for Homeowners",
+    "contextFilters": {
+      "federalTaxCode": true,
+      "stateTaxCodes": [
+        "California"
+      ],
+      "profileTags": [
+        "Married",
+        "Homeowner",
+        "Employee"
+      ],
+      "filingEntity": "individuals"
+    },
+    "messages": [
+      {
+        "id": "demo-msg-1",
+        "role": "user",
+        "content": "What are the main deductions I can claim for my home?",
+        "timestamp": "2025-08-10T22:48:12.099Z",
+        "status": "complete"
+      },
+      {
+        "id": "demo-msg-2",
+        "role": "assistant",
+        "content": "As a homeowner, you can claim several key deductions:\n\n1. **Mortgage Interest**: Deduct interest on up to $750,000 of mortgage debt\n2. **Property Taxes**: Deduct state and local property taxes (capped at $10,000 total with SALT)\n3. **Home Office**: If you work from home, you can deduct a portion of expenses\n4. **Points**: Deduct points paid to obtain your mortgage\n5. **Energy Credits**: Various credits for energy-efficient improvements\n\nWould you like me to explain any of these in more detail?",
+        "timestamp": "2025-08-10T22:48:22.099Z",
+        "status": "complete",
+        "parentUserId": "demo-msg-1"
+      }
+    ],
+    "commits": [
+      {
+        "id": "57e2d077-8e14-407e-8f9a-b9d467e00267",
+        "parentId": null,
+        "message": {
+          "id": "demo-msg-1",
+          "role": "user",
+          "content": "What are the main deductions I can claim for my home?",
+          "timestamp": "2025-08-10T22:48:12.099Z",
+          "status": "complete",
+          "parentUserId": null
+        },
+        "metadata": {
+          "action": "new",
+          "amendedFromCommitId": null,
+          "rebased": false,
+          "final": true
+        },
+        "createdAt": "2025-08-10T23:48:12.099Z"
+      },
+      {
+        "id": "22f22acf-a9f6-42e0-bf66-636d839e88a7",
+        "parentId": "57e2d077-8e14-407e-8f9a-b9d467e00267",
+        "message": {
+          "id": "demo-msg-2",
+          "role": "assistant",
+          "content": "As a homeowner, you can claim several key deductions:\n\n1. **Mortgage Interest**: Deduct interest on up to $750,000 of mortgage debt\n2. **Property Taxes**: Deduct state and local property taxes (capped at $10,000 total with SALT)\n3. **Home Office**: If you work from home, you can deduct a portion of expenses\n4. **Points**: Deduct points paid to obtain your mortgage\n5. **Energy Credits**: Various credits for energy-efficient improvements\n\nWould you like me to explain any of these in more detail?",
+          "timestamp": "2025-08-10T22:48:22.099Z",
+          "status": "complete",
+          "parentUserId": "demo-msg-1"
+        },
+        "metadata": {
+          "action": "amend",
+          "amendedFromCommitId": "57e2d077-8e14-407e-8f9a-b9d467e00267",
+          "rebased": false,
+          "final": true
+        },
+        "createdAt": "2025-08-10T23:48:12.099Z"
+      }
+    ],
+    "headCommitId": "22f22acf-a9f6-42e0-bf66-636d839e88a7",
+    "createdAt": "2025-08-10T22:48:12.099Z",
+    "updatedAt": "2025-08-11T05:08:48.988Z"
+  },
+  {
+    "id": "90dfd55c-cb56-4c2a-9f8e-7f6f4364ab41",
+    "userId": "demo-user",
+    "title": "Self-Employment Tax Questions",
+    "contextFilters": {
+      "federalTaxCode": true,
+      "stateTaxCodes": [
+        "Texas",
+        "Florida"
+      ],
+      "profileTags": [
+        "Self-Employed",
+        "Single"
+      ],
+      "filingEntity": "individuals"
+    },
+    "messages": [
+      {
+        "id": "demo-msg-3",
+        "role": "user",
+        "content": "How do I calculate self-employment tax?",
+        "timestamp": "2025-08-10T21:48:12.099Z",
+        "status": "complete"
+      },
+      {
+        "id": "demo-msg-4",
+        "role": "assistant",
+        "content": "Self-employment tax consists of two parts:\n\n1. **Social Security Tax**: 12.4% on the first $160,200 of net earnings (2023)\n2. **Medicare Tax**: 2.9% on all net earnings\n\n**Total Rate**: 15.3%\n\n**Calculation**:\n- Take your net earnings from self-employment\n- Multiply by 0.9235 (to account for employer portion)\n- Apply the 15.3% rate\n\n**Example**: If you earn $50,000 net:\n$50,000 × 0.9235 × 0.153 = $7,065\n\nYou can deduct half of this amount on your 1040.",
+        "timestamp": "2025-08-10T21:48:22.099Z",
+        "status": "complete",
+        "parentUserId": "demo-msg-3"
+      }
+    ],
+    "commits": [
+      {
+        "id": "b9e403b7-09e6-43f0-8ca7-57db27b84b4c",
+        "parentId": null,
+        "message": {
+          "id": "demo-msg-3",
+          "role": "user",
+          "content": "How do I calculate self-employment tax?",
+          "timestamp": "2025-08-10T21:48:12.099Z",
+          "status": "complete",
+          "parentUserId": null
+        },
+        "metadata": {
+          "action": "new",
+          "amendedFromCommitId": null,
+          "rebased": false,
+          "final": true
+        },
+        "createdAt": "2025-08-10T23:48:12.099Z"
+      },
+      {
+        "id": "b4a5c6d7-015c-426a-b3a7-65628a17a3e9",
+        "parentId": "b9e403b7-09e6-43f0-8ca7-57db27b84b4c",
+        "message": {
+          "id": "demo-msg-4",
+          "role": "assistant",
+          "content": "Self-employment tax consists of two parts:\n\n1. **Social Security Tax**: 12.4% on the first $160,200 of net earnings (2023)\n2. **Medicare Tax**: 2.9% on all net earnings\n\n**Total Rate**: 15.3%\n\n**Calculation**:\n- Take your net earnings from self-employment\n- Multiply by 0.9235 (to account for employer portion)\n- Apply the 15.3% rate\n\n**Example**: If you earn $50,000 net:\n$50,000 × 0.9235 × 0.153 = $7,065\n\nYou can deduct half of this amount on your 1040.",
+          "timestamp": "2025-08-10T21:48:22.099Z",
+          "status": "complete",
+          "parentUserId": "demo-msg-3"
+        },
+        "metadata": {
+          "action": "amend",
+          "amendedFromCommitId": "b9e403b7-09e6-43f0-8ca7-57db27b84b4c",
+          "rebased": false,
+          "final": true
+        },
+        "createdAt": "2025-08-10T23:48:12.099Z"
+      }
+    ],
+    "headCommitId": "b4a5c6d7-015c-426a-b3a7-65628a17a3e9",
+    "createdAt": "2025-08-10T21:48:12.099Z",
+    "updatedAt": "2025-08-11T05:08:48.343Z"
+  },
+  {
+    "id": "da496db9-0f53-4412-af90-6abea40e05d3",
+    "userId": "demo-user",
+    "title": "Student Loan Interest Deduction",
+    "contextFilters": {
+      "federalTaxCode": true,
+      "stateTaxCodes": [
+        "New York"
+      ],
+      "profileTags": [
+        "Student",
+        "Single"
+      ],
+      "filingEntity": "individuals"
+    },
+    "messages": [
+      {
+        "id": "demo-msg-5",
+        "role": "user",
+        "content": "Can I deduct student loan interest?",
+        "timestamp": "2025-08-09T23:48:12.099Z",
+        "status": "complete"
+      },
+      {
+        "id": "demo-msg-6",
+        "role": "assistant",
+        "content": "Yes, you can deduct up to $2,500 in student loan interest if you meet these requirements:\n\n**Eligibility**:\n- You paid interest on a qualified student loan\n- Your modified adjusted gross income (MAGI) is less than $85,000 (single) or $175,000 (married filing jointly)\n- You're legally obligated to pay interest on the loan\n- The loan was taken out solely to pay qualified education expenses\n\n**Phase-out**:\n- Single: $70,000 - $85,000 MAGI\n- Married: $140,000 - $175,000 MAGI\n\n**What counts**:\n- Federal and private student loans\n- Interest paid during the tax year\n- Both principal and interest payments count toward the $2,500 limit",
+        "timestamp": "2025-08-09T23:49:52.099Z",
+        "status": "complete",
+        "parentUserId": "demo-msg-5"
+      }
+    ],
+    "commits": [
+      {
+        "id": "c6768aa2-4b59-43e1-a2df-4b814e33e691",
+        "parentId": null,
+        "message": {
+          "id": "demo-msg-5",
+          "role": "user",
+          "content": "Can I deduct student loan interest?",
+          "timestamp": "2025-08-09T23:48:12.099Z",
+          "status": "complete",
+          "parentUserId": null
+        },
+        "metadata": {
+          "action": "new",
+          "amendedFromCommitId": null,
+          "rebased": false,
+          "final": true
+        },
+        "createdAt": "2025-08-10T23:48:12.099Z"
+      },
+      {
+        "id": "3d93ff3c-2ad0-48f1-9bc4-682c53b11f07",
+        "parentId": "c6768aa2-4b59-43e1-a2df-4b814e33e691",
+        "message": {
+          "id": "demo-msg-6",
+          "role": "assistant",
+          "content": "Yes, you can deduct up to $2,500 in student loan interest if you meet these requirements:\n\n**Eligibility**:\n- You paid interest on a qualified student loan\n- Your modified adjusted gross income (MAGI) is less than $85,000 (single) or $175,000 (married filing jointly)\n- You're legally obligated to pay interest on the loan\n- The loan was taken out solely to pay qualified education expenses\n\n**Phase-out**:\n- Single: $70,000 - $85,000 MAGI\n- Married: $140,000 - $175,000 MAGI\n\n**What counts**:\n- Federal and private student loans\n- Interest paid during the tax year\n- Both principal and interest payments count toward the $2,500 limit",
+          "timestamp": "2025-08-09T23:49:52.099Z",
+          "status": "complete",
+          "parentUserId": "demo-msg-5"
+        },
+        "metadata": {
+          "action": "amend",
+          "amendedFromCommitId": "c6768aa2-4b59-43e1-a2df-4b814e33e691",
+          "rebased": false,
+          "final": true
+        },
+        "createdAt": "2025-08-10T23:48:12.099Z"
+      }
+    ],
+    "headCommitId": "3d93ff3c-2ad0-48f1-9bc4-682c53b11f07",
+    "createdAt": "2025-08-09T23:48:12.099Z",
+    "updatedAt": "2025-08-11T05:53:44.801Z"
+  }
+]

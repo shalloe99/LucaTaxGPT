@@ -1,203 +1,162 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ChatbotPanel from '@/components/ChatbotPanel';
 import ProfilePanel from '@/components/ProfilePanel';
 import AdminPanel from '@/components/AdminPanel';
 import ChatHistory from '@/components/ChatHistory';
-import { Chat } from '../types/Conversation';
+import { useChatList } from '../hooks/useChatList';
+import { useChatInstance } from '../hooks/useChatInstance';
+import type { ChatListItem } from '../types/chat';
+import { ChatState } from '../lib/ChatInstance';
 
 export default function Home() {
   const [mode, setMode] = useState<'user' | 'admin'>('user');
   const [activeTab, setActiveTab] = useState<'chat' | 'profile' | 'admin'>('chat');
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(320);
-  const [chats, setChats] = useState<Chat[]>([]);
-  const [currentChat, setCurrentChat] = useState<Chat | null>(null);
-  const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [showStateDropdown, setShowStateDropdown] = useState(false);
   const stateDropdownRef = useRef<HTMLDivElement>(null);
   const [reloadFlag, setReloadFlag] = useState(0);
   const [pendingNewChat, setPendingNewChat] = useState(false);
+  const [isHydrated, setIsHydrated] = useState(false);
+  
+  // Global model settings state with localStorage persistence
+  const [globalModelSettings, setGlobalModelSettings] = useState<{
+    modelType: 'chatgpt' | 'ollama';
+    model: string;
+    isAsync: boolean;
+  }>({
+    modelType: 'ollama',
+    model: 'phi3:3.8b',
+    isAsync: true
+  });
 
-  // Safe localStorage utility functions
-  // const safeSetItem = (key: string, value: any) => {
-  //   try {
-  //     localStorage.setItem(key, JSON.stringify(value));
-  //   } catch (error) {
-  //     console.error(`Error storing data for key ${key}:`, error);
-  //   }
-  // };
-
-  // const safeGetItem = (key: string) => {
-  //   try {
-  //     const item = localStorage.getItem(key);
-  //     return item ? JSON.parse(item) : null;
-  //   } catch (error) {
-  //     console.error(`Error retrieving data for key ${key}:`, error);
-  //     localStorage.removeItem(key);
-  //     return null;
-  //   }
-  // };
-
-  const US_STATES = [
-    'Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 'Colorado', 'Connecticut',
-    'Delaware', 'Florida', 'Georgia', 'Hawaii', 'Idaho', 'Illinois', 'Indiana', 'Iowa',
-    'Kansas', 'Kentucky', 'Louisiana', 'Maine', 'Maryland', 'Massachusetts', 'Michigan',
-    'Minnesota', 'Mississippi', 'Missouri', 'Montana', 'Nebraska', 'Nevada', 'New Hampshire',
-    'New Jersey', 'New Mexico', 'New York', 'North Carolina', 'North Dakota', 'Ohio',
-    'Oklahoma', 'Oregon', 'Pennsylvania', 'Rhode Island', 'South Carolina', 'South Dakota',
-    'Tennessee', 'Texas', 'Utah', 'Vermont', 'Virginia', 'Washington', 'West Virginia',
-    'Wisconsin', 'Wyoming'
-  ];
-
-  // State abbreviation mapping
-  const STATE_ABBREVIATIONS: { [key: string]: string } = {
-    'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR', 'California': 'CA',
-    'Colorado': 'CO', 'Connecticut': 'CT', 'Delaware': 'DE', 'Florida': 'FL', 'Georgia': 'GA',
-    'Hawaii': 'HI', 'Idaho': 'ID', 'Illinois': 'IL', 'Indiana': 'IN', 'Iowa': 'IA',
-    'Kansas': 'KS', 'Kentucky': 'KY', 'Louisiana': 'LA', 'Maine': 'ME', 'Maryland': 'MD',
-    'Massachusetts': 'MA', 'Michigan': 'MI', 'Minnesota': 'MN', 'Mississippi': 'MS',
-    'Missouri': 'MO', 'Montana': 'MT', 'Nebraska': 'NE', 'Nevada': 'NV', 'New Hampshire': 'NH',
-    'New Jersey': 'NJ', 'New Mexico': 'NM', 'New York': 'NY', 'North Carolina': 'NC',
-    'North Dakota': 'ND', 'Ohio': 'OH', 'Oklahoma': 'OK', 'Oregon': 'OR', 'Pennsylvania': 'PA',
-    'Rhode Island': 'RI', 'South Carolina': 'SC', 'South Dakota': 'SD', 'Tennessee': 'TN',
-    'Texas': 'TX', 'Utah': 'UT', 'Vermont': 'VT', 'Virginia': 'VA', 'Washington': 'WA',
-    'West Virginia': 'WV', 'Wisconsin': 'WI', 'Wyoming': 'WY'
-  };
-
+  // Load settings from localStorage after hydration
   useEffect(() => {
-    // Load user profile from localStorage
-    // const cachedProfile = safeGetItem('userProfile');
-    // if (cachedProfile && typeof cachedProfile === 'object') {
-    //   setUserProfile(cachedProfile);
-    // }
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('lucatax-model-settings');
+      if (saved) {
+        try {
+          const parsedSettings = JSON.parse(saved);
+          setGlobalModelSettings(parsedSettings);
+        } catch (e) {
+          console.warn('Failed to parse saved model settings:', e);
+        }
+      }
+      setIsHydrated(true);
+    }
   }, []);
 
-  // On initial load, show intro if no chats
+  // Save global model settings to localStorage whenever they change
   useEffect(() => {
-    if (chats.length === 0 && !pendingNewChat) {
-      setCurrentChat(null);
-      setSelectedChatId(null);
-      setPendingNewChat(true);
+    if (typeof window !== 'undefined' && isHydrated) {
+      localStorage.setItem('lucatax-model-settings', JSON.stringify(globalModelSettings));
     }
-  }, [chats]);
+  }, [globalModelSettings, isHydrated]);
+  
+  // Use the new chat hooks
+  const {
+    chats: chatList,
+    selectedChatId,
+    createChat,
+    deleteChat,
+    selectChat,
+    updateChatTitle: updateChatTitleInList,
+    loadAllChats,
+    isLoading: isChatListLoading,
+    isInitialized: isChatListInitialized
+  } = useChatList({
+    onChatAdded: (chat) => {
+      selectChat(chat.id);
+    },
+    // When a chat is removed, selection will be advanced to the next chat by the hook/manager
+    onChatRemoved: () => {},
+    onError: (error) => {
+      console.error('Chat list error:', error);
+    }
+  });
 
-  // Remove auto-selecting latest chat
-  // useEffect(() => {
-  //   if (chats.length > 0 && !currentChat) {
-  //     const latest = chats.reduce((a, b) => (new Date(a.updatedAt || a.createdAt) > new Date(b.updatedAt || b.createdAt) ? a : b));
-  //     setCurrentChat(latest);
-  //     setSelectedChatId(latest.id);
-  //   }
-  // }, [chats, currentChat]);
+  // Use chat instance for the selected chat
+  const {
+    state: currentChatState,
+    isLoading: isChatLoading,
+    sendMessage,
+    cancelRequest,
+    reloadMessage,
+    editMessage,
+    tryAgain,
+    setModelSettings,
+    setContextFilters,
+    setTitle,
+    setId,
+    updateStreamingMessage
+  } = useChatInstance(selectedChatId || undefined, {
+    onStateUpdate: (updates) => {
+      // Update the chat list when chat state changes
+      if (selectedChatId && updates.title) {
+        updateChatTitleInList(selectedChatId, updates.title);
+      }
+    },
+    onError: (error) => {
+      // Only log non-"chat not found" errors as console errors
+      if (!error.includes('Chat not found')) {
+        console.error('Chat instance error:', error);
+      }
+    },
+    onChatNotFound: (chatId) => {
+      console.log(`📝 [Home] Chat ${chatId} not found, clearing selection`);
+      // Clear selection when chat is not found (likely deleted)
+      selectChat(null);
+    }
+  });
 
   // Handler for starting a new chat (show intro, don't create chat yet)
   const handleStartNewChat = () => {
-    setCurrentChat(null);
-    setSelectedChatId(null);
+    selectChat(null);
     setPendingNewChat(true);
   };
 
   // Handler for actually creating a chat when user sends first message
   const handleCreateChatWithMessage = async (message: string, modelType: 'chatgpt' | 'ollama', model: string) => {
-    // Create chat in backend with first user message
-    const response = await fetch('http://localhost:5300/api/chat/chats', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title: 'New Conversation',
-        contextFilters: { federalTaxCode: true, stateTaxCodes: [], profileTags: [] },
-        messages: [{
-          id: Date.now().toString(),
-          role: 'user',
-          content: message,
-          timestamp: new Date().toISOString(),
-        }],
-      }),
-    });
-    
-    if (response.ok) {
-      const newChat = await response.json();
-      const userMsg = {
-        id: Date.now().toString(),
-        role: 'user',
-        content: message,
-        timestamp: new Date().toISOString(),
-      };
+    try {
+      console.log('🚀 Creating new chat with first message...');
       
-      // Create the chat object immediately
-      const chat = {
-        id: newChat.id,
-        title: newChat.title,
-        lastMessage: message,
-        timestamp: newChat.updatedAt || newChat.createdAt || new Date().toISOString(),
-        messageCount: 1,
-        messages: [userMsg], // Start with just the user message
-        contextFilters: {
-          federalTaxCode: typeof newChat.contextFilters?.federalTaxCode === 'boolean' ? newChat.contextFilters.federalTaxCode : true,
-          stateTaxCodes: Array.isArray(newChat.contextFilters?.stateTaxCodes) ? newChat.contextFilters.stateTaxCodes : [],
-          profileTags: Array.isArray(newChat.contextFilters?.profileTags) ? newChat.contextFilters.profileTags : [],
-        },
-        createdAt: newChat.createdAt || new Date().toISOString(),
-        updatedAt: newChat.updatedAt || new Date().toISOString(),
-      };
-      
-      // Immediately transition to the regular chat panel
-      setChats(prev => [chat, ...prev]);
-      setCurrentChat(chat);
-      setSelectedChatId(chat.id);
-      setPendingNewChat(false);
-      
-      // Now make the API call to get the bot response in the background
-      try {
-        const botResponse = await fetch(`/api/chat/user/messaging/${newChat.id}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            message: message,
-            context: '',
-            domainKnowledge: { federalTaxCode: true, stateTaxCodes: [], profileTags: [] },
-            modelType,
-            model,
-          }),
-        });
-        
-        if (botResponse.ok) {
-          const data = await botResponse.json();
-          const botMsg = {
-            id: (Date.now() + 1).toString(),
-            role: 'assistant',
-            content: data.response,
-            timestamp: new Date().toISOString(),
-            relevantDocs: data.relevantDocs,
-          };
-          
-          // Update the chat with the bot response
-          const updatedChat = {
-            ...chat,
-            lastMessage: botMsg.content,
-            messageCount: 2,
-            messages: [userMsg, botMsg],
-            updatedAt: new Date().toISOString(),
-          };
-          
-          // Update backend with bot message
-          await fetch(`/api/chat/chats/${newChat.id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ messages: [userMsg, botMsg] }),
-          });
-          
-          // Update the chat in the UI
-          setChats(prev => prev.map(c => c.id === chat.id ? updatedChat : c));
-          setCurrentChat(updatedChat);
-        }
-      } catch (error) {
-        console.error('Error getting bot response:', error);
-        // Optionally show an error message in the chat
+      // Create chat in backend first
+      const newChat = await createChat('New Conversation');
+      if (!newChat) {
+        console.error('❌ Failed to create new chat');
+        return;
       }
+      
+      console.log('✅ Created new chat with ID:', newChat.id);
+      // Select the chat in the UI (keep welcome view until first send kicks off)
+      selectChat(newChat.id);
+
+      // Wait briefly for ChatInstance to initialize for the new chat, then send via hook
+      const maxWaitMs = 1500;
+      const start = Date.now();
+      while (!(currentChatState && currentChatState.id === newChat.id) && Date.now() - start < maxWaitMs) {
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise(r => setTimeout(r, 50));
+      }
+
+      // Send the first message through ChatInstance so it creates the pending assistant (thinking) item
+      try {
+        const ok = await sendMessage(message, userProfile);
+        if (!ok) {
+          console.warn('First message send returned false; user may resend manually');
+        }
+        // Now that sending has begun/finished, exit welcome view
+        setPendingNewChat(false);
+      } catch (sendErr) {
+        console.error('❌ Error sending first message via ChatInstance:', sendErr);
+        // Even if sending fails, exit welcome view to allow manual retry in regular layout
+        setPendingNewChat(false);
+      }
+    } catch (error) {
+      console.error('❌ Failed to create chat with message:', error);
     }
   };
 
@@ -220,47 +179,104 @@ export default function Home() {
 
   const handleStateToggle = (state: string) => {
     // This function is no longer needed as domainKnowledge is removed
-    // setDomainKnowledge(prev => ({
-    //   ...prev,
-    //   stateTaxCodes: prev.stateTaxCodes.includes(state)
-    //     ? prev.stateTaxCodes.filter(s => s !== state)
-    //     : [...prev.stateTaxCodes, state]
-    // }));
+    return 'N/A'; // Placeholder as domainKnowledge is removed
   };
 
   const formatSelectedStates = (states: string[]) => {
     // This function is no longer needed as domainKnowledge is removed
-    // if (states.length === 0) return 'None selected';
-    // if (states.length === 1) return STATE_ABBREVIATIONS[states[0]] || states[0];
-    // if (states.length === 2) return states.map(s => STATE_ABBREVIATIONS[s] || s).join(', ');
-    // if (states.length === 3) return states.map(s => STATE_ABBREVIATIONS[s] || s).join(', ');
-    // return `${states.slice(0, 3).map(s => STATE_ABBREVIATIONS[s] || s).join(', ')}...`;
     return 'N/A'; // Placeholder as domainKnowledge is removed
   };
 
-  const handleChatSelect = (chat: Chat) => {
-    setCurrentChat(chat);
-    setSelectedChatId(chat.id);
+  const handleChatSelect = (chat: ChatListItem) => {
+    // Allow switching to any chat, even if another is loading
+    selectChat(chat.id);
+    setPendingNewChat(false);
   };
 
   // Function to update a chat's title in the shared state
   const updateChatTitle = (chatId: string, newTitle: string) => {
-    setChats(prev => prev.map(conv => conv.id === chatId ? { ...conv, title: newTitle } : conv));
-    if (currentChat && currentChat.id === chatId) {
-      setCurrentChat({ ...currentChat, title: newTitle });
+    updateChatTitleInList(chatId, newTitle);
+    // Also update the active chat instance state so header reflects immediately
+    if (!selectedChatId || selectedChatId === chatId) {
+      setTitle(newTitle);
     }
   };
 
+  // Listen for title updates dispatched by other components (e.g., sidebar rename)
+  useEffect(() => {
+    const handleTitleUpdated = (e: any) => {
+      const { id, title } = e.detail || {};
+      if (!id || !title) return;
+      // Update chat list and active chat instance
+      updateChatTitleInList(id, title);
+      if (selectedChatId === id) {
+        setTitle(title);
+      }
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('conversation-title-updated', handleTitleUpdated);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('conversation-title-updated', handleTitleUpdated);
+      }
+    };
+  }, [selectedChatId, updateChatTitleInList, setTitle]);
+
   // Add handler to update chat context in state
-  const handleChatContextUpdate = (updated: Chat & { contextFilters?: any }) => {
-    setChats(prev => prev.map(conv => conv.id === updated.id ? { ...conv, ...updated, ...(updated.contextFilters || {}) } : conv));
-    if (currentChat && currentChat.id === updated.id) {
-      setCurrentChat({ ...currentChat, ...updated, ...(updated.contextFilters || {}) });
+  const handleChatContextUpdate = (updated: any) => {
+    console.log('🔄 Parent: Chat context updated:', updated);
+    // The chat state is managed by the useChatInstance hook
+    // Only trigger reload when streaming is complete, not during streaming updates
+    if (!updated?.loadingState?.isLoading) {
+      setReloadFlag(f => f + 1);
     }
   };
 
   // This callback will be passed to ChatHistory and ChatbotPanel
-  const handleChatContextUpdateReload = () => setReloadFlag(f => f + 1);
+  const handleChatContextUpdateReload = (updated?: any) => {
+    if (updated) {
+      handleChatContextUpdate(updated);
+    } else {
+      setReloadFlag(f => f + 1);
+    }
+  };
+
+  // Settings handlers for global model settings
+  const handleModelChange = (modelType: 'chatgpt' | 'ollama', model: string) => {
+    // Update global settings
+    setGlobalModelSettings(prev => ({ ...prev, modelType, model }));
+    
+    // Update current chat settings if a chat is selected
+    if (selectedChatId) {
+      setModelSettings({ modelType, model });
+    }
+  };
+
+  const handleModeChange = (isAsync: boolean) => {
+    // Update global settings
+    setGlobalModelSettings(prev => ({ ...prev, isAsync }));
+    
+    // Update current chat settings if a chat is selected
+    if (selectedChatId) {
+      setModelSettings({ isAsync });
+    }
+  };
+
+  const handleAsyncModeChange = (isAsync: boolean) => {
+    // Update global settings
+    setGlobalModelSettings(prev => ({ ...prev, isAsync }));
+    
+    // Update current chat settings if a chat is selected
+    if (selectedChatId) {
+      setModelSettings({ isAsync });
+    }
+  };
+
+  // Get current chat settings (use current chat settings or global settings)
+  const getCurrentChatSettings = () => {
+    return currentChatState?.modelSettings || globalModelSettings;
+  };
 
   if (mode === 'admin') {
     return (
@@ -291,6 +307,10 @@ export default function Home() {
     );
   }
 
+  const currentSettings = getCurrentChatSettings();
+  
+
+
   return (
     <div className="flex h-screen bg-gray-50">
       {/* User Mode */}
@@ -298,36 +318,56 @@ export default function Home() {
       {/* Left Sidebar - Conversation History */}
       <div className="relative">
         <ChatHistory 
-          chats={chats}
-          setChats={setChats}
+          chats={chatList}
+          setChats={() => {}} // No-op since state is managed by useChatList
           selectedChatId={selectedChatId}
-          setSelectedChatId={setSelectedChatId}
-          onChatSelect={(chat) => {
-            setCurrentChat({ ...chat });
-            setSelectedChatId(chat.id);
-            setPendingNewChat(false);
-          }}
-          onNewChat={undefined}
+          setSelectedChatId={() => {}} // No-op since state is managed by useChatList
+          onChatSelect={handleChatSelect}
           onStartNewChat={handleStartNewChat}
+          onDeleteChat={deleteChat} // Connect to main app's delete function
           onWidthChange={setSidebarWidth}
           width={sidebarWidth}
           onModeSwitch={() => setMode('admin')}
           reloadFlag={reloadFlag}
           pendingNewChat={pendingNewChat}
+          selectedModelType={currentSettings.modelType}
+          selectedModel={currentSettings.model}
+          isAsyncMode={currentSettings.isAsync}
+          onModelChange={handleModelChange}
+          onModeChange={handleModeChange}
+          onAsyncModeChange={handleAsyncModeChange}
+          // Lazy loading props
+          loadAllChats={loadAllChats}
+          isLoading={isChatListLoading}
+          isInitialized={isChatListInitialized}
         />
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col overflow-hidden">
         {/* Chat Area */}
         <div className="flex-1 overflow-hidden">
           <ChatbotPanel 
-            currentChat={currentChat}
+            currentChat={currentChatState}
             userProfile={userProfile}
             updateChatTitle={updateChatTitle}
             onChatContextUpdate={handleChatContextUpdateReload}
             pendingNewChat={pendingNewChat}
             onCreateChatWithMessage={handleCreateChatWithMessage}
+            selectedModelType={currentSettings.modelType}
+            selectedModel={currentSettings.model}
+            onGlobalModelChange={handleModelChange}
+            isHydrated={isHydrated}
+            isAsyncMode={currentSettings.isAsync}
+            // Pass ChatInstance methods for proper state management
+            onSendMessage={sendMessage}
+            onCancelRequest={cancelRequest}
+            onReloadMessage={reloadMessage}
+            onEditMessage={editMessage}
+            onTryAgain={tryAgain}
+            onUpdateModelSettings={setModelSettings}
+            onUpdateContextFilters={setContextFilters}
+            updateStreamingMessage={updateStreamingMessage}
           />
         </div>
       </div>
