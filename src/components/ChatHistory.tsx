@@ -20,6 +20,8 @@ interface ChatHistoryProps {
   onDeleteChat?: (chatId: string) => Promise<boolean>; // Add delete callback
   onWidthChange?: (width: number) => void;
   width?: number;
+  sidebarOpen?: boolean;
+  onSidebarToggle?: (open: boolean) => void;
   onModeSwitch?: () => void;
   reloadFlag?: number;
   // Add new props for settings
@@ -94,7 +96,9 @@ export default function ChatHistory({
   // Lazy loading props
   loadAllChats,
   isLoading: externalIsLoading,
-  isInitialized
+  isInitialized,
+  sidebarOpen = true,
+  onSidebarToggle
 }: ChatHistoryProps & { 
   pendingNewChat?: boolean, 
   onStartNewChat?: () => void,
@@ -120,7 +124,7 @@ export default function ChatHistory({
   const dragStartWidth = useRef(0);
   const [contextMenu, setContextMenu] = useState<{ show: boolean, x: number, y: number, chatId: string | null }>({ show: false, x: 0, y: 0, chatId: null });
   const [dropdownMenu, setDropdownMenu] = useState<{ show: boolean, chatId: string | null, anchor: { top: number, left: number } }>({ show: false, chatId: null, anchor: { top: 0, left: 0 } });
-  const [sidebarOpen, setSidebarOpen] = useState(false); // Start with false to prevent hydration mismatch
+  const [sidebarOpenState, setSidebarOpenState] = useState(false); // Start with false to prevent hydration mismatch
   const [hasHydrated, setHasHydrated] = useState(false);
   // Fully hide sidebar on very small screens
   const [hideCompletely, setHideCompletely] = useState(false);
@@ -170,8 +174,10 @@ export default function ChatHistory({
     setIsClient(true);
     setHasHydrated(true);
     // Set sidebar open after client-side hydration
-    setSidebarOpen(true);
-  }, []);
+    if (onSidebarToggle) {
+      onSidebarToggle(true);
+    }
+  }, [onSidebarToggle]);
 
   // Handle ESC key to close settings modal
   useEffect(() => {
@@ -624,16 +630,20 @@ export default function ChatHistory({
     
     function handleResize() {
       const width = window.innerWidth;
-      if (width < 800) setSidebarOpen(false);
+      if (width < 800 && onSidebarToggle) {
+        onSidebarToggle(false);
+      }
       // Hide completely when below Tailwind's sm breakpoint (~640px)
       setHideCompletely(width < 640);
     }
     window.addEventListener('resize', handleResize);
     // Collapse on mount if already too small
-    if (window.innerWidth < 800) setSidebarOpen(false);
+    if (window.innerWidth < 800 && onSidebarToggle) {
+      onSidebarToggle(false);
+    }
     setHideCompletely(window.innerWidth < 640);
     return () => window.removeEventListener('resize', handleResize);
-  }, [isClient]);
+  }, [isClient, onSidebarToggle]);
 
   // Add function to fetch available models
   const fetchAvailableModels = async () => {
@@ -684,7 +694,7 @@ export default function ChatHistory({
         <div className="flex flex-col items-center bg-white border-r border-gray-200 w-14 min-w-[56px] max-w-[56px] z-[99999]">
           <button
             className="mt-4 mb-2 p-2 rounded hover:bg-gray-100"
-            onClick={() => setSidebarOpen(true)}
+            onClick={() => onSidebarToggle?.(true)}
             aria-label="Expand sidebar"
             title="Expand sidebar"
           >
@@ -913,7 +923,7 @@ export default function ChatHistory({
             </button>
             <button
               className="rounded-full p-2 hover:bg-gray-200"
-              onClick={() => setSidebarOpen(false)}
+              onClick={() => onSidebarToggle?.(false)}
               aria-label="Collapse sidebar"
               title="Collapse sidebar"
             >
@@ -1167,7 +1177,7 @@ export default function ChatHistory({
       {isClient && window.innerWidth < 800 && sidebarOpen && (
         <div
           className="fixed inset-0 bg-black bg-opacity-40 z-[99998] pointer-events-auto"
-          onClick={() => setSidebarOpen(false)}
+          onClick={() => onSidebarToggle?.(false)}
         />
       )}
       

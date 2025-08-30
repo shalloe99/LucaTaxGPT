@@ -2,10 +2,12 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { flushSync } from 'react-dom';
+import { Expand, Upload, X } from 'lucide-react';
 import { ChatState, Message } from '../types/chat';
 import MessageBubble from '@/components/chat/MessageBubble';
 import ChatInput from '@/components/chat/ChatInput';
 import ChatHeader from '@/components/chat/ChatHeader';
+import ContextFilterMenu from '@/components/chat/ContextFilterMenu';
 
 interface DomainKnowledge {
   stateTaxCodes: string[];
@@ -23,12 +25,13 @@ interface ChatbotPanelProps {
   updateChatTitle?: (chatId: string, newTitle: string) => void;
   onChatContextUpdate?: (updated: ChatState & { contextFilters?: any }) => void;
   pendingNewChat?: boolean;
-  onCreateChatWithMessage?: (msg: string, modelType: 'chatgpt' | 'ollama', model: string) => void;
+  onCreateChatWithMessage?: (msg: string, modelType: 'chatgpt' | 'ollama', model: string) => Promise<void>;
   selectedModelType?: 'chatgpt' | 'ollama';
   selectedModel?: string;
   onGlobalModelChange?: (modelType: 'chatgpt' | 'ollama', model: string) => void;
   isHydrated?: boolean;
   isAsyncMode?: boolean;
+  sidebarOpen?: boolean;
   // ChatInstance methods for proper state management
   onSendMessage?: (message: string, userProfile?: any) => Promise<boolean>;
   onCancelRequest?: () => Promise<void>;
@@ -77,6 +80,7 @@ export default function ChatbotPanel({
   onGlobalModelChange,
   isHydrated,
   isAsyncMode = true,
+  sidebarOpen,
   // ChatInstance methods
   onSendMessage,
   onCancelRequest,
@@ -107,8 +111,13 @@ export default function ChatbotPanel({
   const [isClient, setIsClient] = useState(false);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [isExpandedTextOpen, setIsExpandedTextOpen] = useState(false);
+  const [expandedText, setExpandedText] = useState('');
+  const [isExpandedContextMenuOpen, setIsExpandedContextMenuOpen] = useState(false);
+  const expandedContextMenuRef = useRef<HTMLButtonElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  const expandTextareaRef = useRef<HTMLTextAreaElement>(null);
   const streamingMessageRef = useRef<{ id: string; content: string } | null>(null);
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [isUserNearBottom, setIsUserNearBottom] = useState(true);
@@ -344,10 +353,7 @@ export default function ChatbotPanel({
     if (!currentChat || !onReloadMessage) return;
 
     try {
-      const success = await onReloadMessage(messageId, modelType, model);
-      if (!success) {
-        console.error('Failed to reload message through ChatInstance');
-      }
+      await onReloadMessage(messageId, modelType, model);
     } catch (error) {
       console.error('Error reloading message:', error);
     }
@@ -401,16 +407,11 @@ export default function ChatbotPanel({
         // Handle AbortError gracefully - this is expected when retrying
         try {
           // Kick off retry - this will create a new assistant message via the backend
-          const success = await onTryAgain(assistantMessageId, userProfile);
+          await onTryAgain(assistantMessageId);
           
-          if (success) {
-            console.log('✅ Try again initiated successfully');
-            // The backend will handle creating the new assistant message
-            // and the UI will update via the existing message update mechanisms
-          } else {
-            console.error('❌ Failed to initiate try again');
-            setIsLoading(false);
-          }
+          console.log('✅ Try again initiated successfully');
+          // The backend will handle creating the new assistant message
+          // and the UI will update via the existing message update mechanisms
         } catch (retryError) {
           // Handle AbortError specifically - this is normal when retrying
           if (retryError instanceof Error && retryError.name === 'AbortError') {
@@ -556,7 +557,7 @@ export default function ChatbotPanel({
   const handleScroll = useCallback(() => {
     const scroller = chatScrollRef.current;
     if (!scroller) return;
-    const threshold = 100; // px from bottom to still auto-scroll
+    const threshold = 120; // px from bottom to still auto-scroll (increased to account for input box)
     const nearBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - threshold;
     setIsUserNearBottom(nearBottom);
   }, []);
@@ -924,11 +925,11 @@ export default function ChatbotPanel({
     try {
       let success = false;
       if (editingMessageId && onEditMessage) {
-        success = await onEditMessage(editingMessageId, messageContent, userProfile);
+        success = await onEditMessage(editingMessageId, messageContent);
       } else if (onSendMessage) {
-        success = await onSendMessage(messageContent, userProfile);
+        success = await onSendMessage(messageContent);
       }
-      if (!success) {
+      if (success === false) {
         console.error('Failed to send message');
       }
     } catch (error) {
@@ -1111,6 +1112,42 @@ export default function ChatbotPanel({
     return selectedModelType === 'chatgpt' ? 'OpenAI' : 'Ollama';
   };
 
+  // Handle expanded text editor
+  const openExpandedText = () => {
+    setExpandedText(inputMessage);
+    setIsExpandedTextOpen(true);
+    // Focus the textarea after a short delay to ensure it's rendered
+    setTimeout(() => {
+      expandTextareaRef.current?.focus();
+    }, 100);
+  };
+
+  // Sync expanded text with input message when popup opens
+  useEffect(() => {
+    if (isExpandedTextOpen) {
+      setExpandedText(inputMessage);
+    }
+  }, [isExpandedTextOpen, inputMessage]);
+
+  const closeExpandedText = () => {
+    setIsExpandedTextOpen(false);
+    setExpandedText('');
+  };
+
+  const applyExpandedText = () => {
+    setInputMessage(expandedText);
+    closeExpandedText();
+  };
+
+  const handleExpandedTextKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      closeExpandedText();
+    } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      applyExpandedText();
+    }
+  };
+
   // Detect transition from welcome view to regular chat to trigger quick input animation
   const prevPendingRef = useRef<boolean>(pendingNewChat);
   useEffect(() => {
@@ -1148,9 +1185,9 @@ export default function ChatbotPanel({
       />
 
       {/* Main Content with overlay for welcome */}
-      <div className="flex-1 overflow-hidden relative">
+      <div className="flex-1 overflow-hidden relative flex flex-col chat-main-content">
         {/* Chat Area (always mounted) */}
-        <div className="flex-1 overflow-y-auto p-4 pb-32" ref={chatScrollRef} onScroll={handleScroll}>
+        <div className="flex-1 overflow-y-auto p-4 pb-20 chat-scroll-area" ref={chatScrollRef} onScroll={handleScroll}>
           <div className="max-w-4xl mx-auto space-y-6 relative">
             {turns.length > 0 && (
               turns.map((turn, idx) => {
@@ -1230,11 +1267,11 @@ export default function ChatbotPanel({
                 : 'opacity-0 -translate-y-2 pointer-events-none'
             }`}
           >
-            <div className="flex items-center justify-center h-full p-6 pb-32">
+            <div className="flex items-center justify-center h-full p-6 pb-20">
               <div className="w-full max-w-2xl mx-auto animate-in slide-in-from-bottom-2 duration-150">
                 <div className="text-center text-gray-700 mb-6">
                   <div className="text-3xl font-bold mb-2">Welcome to LucaTaxGPT</div>
-                  <div className="text-sm text-gray-500">Ask anything about taxes. I’ll cite and explain using official sources.</div>
+                  <div className="text-sm text-gray-500">Ask anything about taxes. I'll cite and explain using official sources.</div>
                 </div>
                 {/* Match floating entry panel styling */}
                 <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-4 sm:p-5 animate-in fade-in duration-150">
@@ -1247,13 +1284,23 @@ export default function ChatbotPanel({
                       className="flex-1 w-full p-3 sm:p-3.5 border border-gray-200 bg-white rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
                       rows={3}
                     />
-                    <button
-                      onClick={handleFirstMessage}
-                      disabled={!inputMessage.trim() || isLoading}
-                      className="h-10 sm:h-11 shrink-0 px-4 sm:px-5 bg-black text-white rounded-xl hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      {isLoading ? 'Sending...' : 'Send'}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={openExpandedText}
+                        disabled={isLoading}
+                        className="h-10 sm:h-11 shrink-0 px-3 bg-gray-100 text-gray-600 rounded-xl hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        title="Expand text editor"
+                      >
+                        <Expand className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={handleFirstMessage}
+                        disabled={!inputMessage.trim() || isLoading}
+                        className="h-10 sm:h-11 shrink-0 px-4 sm:px-5 bg-black text-white rounded-xl hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {isLoading ? 'Sending...' : 'Send'}
+                      </button>
+                    </div>
                   </div>
                   <div className="mt-3 text-xs text-gray-400 text-center">Press Enter to send • Shift+Enter for a new line</div>
                 </div>
@@ -1263,7 +1310,11 @@ export default function ChatbotPanel({
         )}
         {/* Input Area with quick slide-in after welcome (anchored to chat panel) */}
         {shouldShowFloatingInput && (
-          <div className={justExitedWelcome ? 'animate-in slide-in-from-bottom-2 duration-150' : ''}>
+          <div 
+            className={`chat-input-container ${justExitedWelcome ? 'animate-in slide-in-from-bottom-2 duration-150' : ''}`}
+            role="region"
+            aria-label="Message input area"
+          >
             <ChatInput
               value={inputMessage}
               isLoading={isLoading}
@@ -1278,7 +1329,113 @@ export default function ChatbotPanel({
                 setUserProfile(prev => ({ ...prev, tags }));
               }}
               floatingWithinParent={true}
+              sidebarOpen={sidebarOpen}
+              onExpandText={openExpandedText}
             />
+          </div>
+        )}
+
+        {/* Expanded Text Editor Overlay - Modern translucent design */}
+        {isExpandedTextOpen && (
+          <div className="absolute inset-0 bg-white/80 backdrop-blur-md z-50 flex flex-col p-8">
+            {/* Main content area with subtle border */}
+            <div className="flex-1 flex flex-col bg-white/60 backdrop-blur-sm rounded-2xl border border-white/40 shadow-xl">
+              {/* Large textarea - taking most space */}
+              <div className="flex-1 p-8 min-h-0">
+                <textarea
+                  ref={expandTextareaRef}
+                  value={expandedText}
+                  onChange={(e) => setExpandedText(e.target.value)}
+                  onKeyDown={handleExpandedTextKeyDown}
+                  placeholder="Type your message..."
+                  className="w-full h-full p-6 bg-white/70 backdrop-blur-sm border border-gray-200/50 rounded-xl resize-none focus:outline-none focus:ring-1 focus:ring-blue-400/50 focus:border-blue-400/50 text-gray-900 text-lg leading-relaxed placeholder-gray-400"
+                  style={{ fontFamily: 'inherit' }}
+                />
+              </div>
+
+              {/* Bottom area with controls and footnotes */}
+              <div className="flex items-center justify-between px-8 pb-6">
+                {/* Left side - unremarkable footnote style info */}
+                <div className="flex items-center gap-6 text-xs text-gray-400 font-mono">
+                  <span>{expandedText.length} chars</span>
+                  <span>{expandedText.split('\n').length} lines</span>
+                  <span className="opacity-60">⌘↵ apply • esc cancel</span>
+                </div>
+
+                {/* Right side - action buttons using same icons as text entry */}
+                <div className="flex items-center gap-3">
+                  {/* Context menu button - opens context filters */}
+                  <button
+                    ref={expandedContextMenuRef}
+                    onClick={() => setIsExpandedContextMenuOpen(!isExpandedContextMenuOpen)}
+                    className="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-white/50 transition-all duration-200"
+                    title="Context filters"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M10 3a1.5 1.5 0 110 3 1.5 1.5 0 010-3zM10 8.5a1.5 1.5 0 110 3 1.5 1.5 0 010-3zM10 14a1.5 1.5 0 110 3 1.5 1.5 0 010-3z" />
+                    </svg>
+                  </button>
+                  
+                  {/* Expand button (collapse when in expanded mode) */}
+                  <button
+                    onClick={closeExpandedText}
+                    className="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-white/50 transition-all duration-200"
+                    title="Collapse"
+                  >
+                    <Expand className="w-4 h-4 rotate-180" />
+                  </button>
+
+                  {/* Send button - sends message directly and shrinks */}
+                  <button
+                    onClick={async () => {
+                      if (!expandedText.trim() || isLoading) return;
+                      
+                      const messageToSend = expandedText.trim();
+                      
+                      // Close the expanded editor immediately for instant feedback
+                      closeExpandedText();
+                      
+                      // Send the message directly
+                      if (pendingNewChat && onCreateChatWithMessage) {
+                        // For new chats, use the create chat with message function
+                        await onCreateChatWithMessage(messageToSend, selectedModelType, selectedModel);
+                      } else {
+                        // For existing chats, set input and send
+                        setInputMessage(messageToSend);
+                        // Small delay to ensure state updates, then send
+                        setTimeout(async () => {
+                          await sendMessage();
+                        }, 50);
+                      }
+                    }}
+                    disabled={!expandedText.trim() || isLoading}
+                    className={`p-2 rounded-lg transition-all duration-200 ${
+                      !expandedText.trim() || isLoading
+                        ? 'text-gray-300 cursor-not-allowed'
+                        : 'text-gray-600 hover:text-gray-800 hover:bg-white/70'
+                    }`}
+                    title="Send message"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M8.99992 16V6.41407L5.70696 9.70704C5.31643 10.0976 4.68342 10.0976 4.29289 9.70704C3.90237 9.31652 3.90237 8.6835 4.29289 8.29298L9.29289 3.29298L9.36907 3.22462C9.76184 2.90427 10.3408 2.92686 10.707 3.29298L15.707 8.29298L15.7753 8.36915C16.0957 8.76192 16.0731 9.34092 15.707 9.70704C15.3408 10.0732 14.7618 10.0958 14.3691 9.7754L14.2929 9.70704L10.9999 6.41407V16C10.9999 16.5523 10.5522 17 9.99992 17C9.44764 17 8.99992 16.5523 8.99992 16Z" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* Context Filter Menu for Expanded Editor */}
+              <ContextFilterMenu
+                isOpen={isExpandedContextMenuOpen}
+                onClose={() => setIsExpandedContextMenuOpen(false)}
+                domainKnowledge={domainKnowledge}
+                profileTags={userProfile.tags}
+                onDomainKnowledgeChange={updateDomainKnowledge}
+                onProfileTagsChange={(tags) => {
+                  setUserProfile(prev => ({ ...prev, tags }));
+                }}
+                triggerRef={expandedContextMenuRef}
+              />
+            </div>
           </div>
         )}
       </div>

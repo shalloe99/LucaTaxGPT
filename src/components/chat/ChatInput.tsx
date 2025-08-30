@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useRef, useEffect, useState } from 'react';
+import { Expand } from 'lucide-react';
 import ContextFilterMenu from './ContextFilterMenu';
 
 interface ChatInputProps {
@@ -20,6 +21,10 @@ interface ChatInputProps {
   onProfileTagsChange?: (tags: string[]) => void;
   // If true, render floating container relative to parent chat panel instead of viewport
   floatingWithinParent?: boolean;
+  // Sidebar state for positioning adjustments
+  sidebarOpen?: boolean;
+  // Callback for expand text functionality
+  onExpandText?: () => void;
 }
 
 export default function ChatInput({
@@ -34,6 +39,8 @@ export default function ChatInput({
   onDomainKnowledgeChange,
   onProfileTagsChange,
   floatingWithinParent = false,
+  sidebarOpen = true,
+  onExpandText,
 }: ChatInputProps) {
   const contentEditableRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -45,6 +52,8 @@ export default function ChatInput({
       contentEditableRef.current.textContent = value;
     }
   }, [value]);
+
+
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -71,19 +80,32 @@ export default function ChatInput({
     setIsContextMenuOpen(false);
   };
 
+  // Handle expand text button click
+  const handleExpandClick = () => {
+    if (onExpandText) {
+      onExpandText();
+    }
+    // Close context menu when expanding
+    setIsContextMenuOpen(false);
+  };
+
   const containerClass = floatingWithinParent
-    ? 'absolute bottom-0 left-0 right-0 z-50 p-4 pointer-events-none'
+    ? 'w-full pointer-events-auto'
     : 'fixed bottom-0 left-0 right-0 z-50 p-4 pointer-events-none';
 
   return (
     <div className={containerClass}>
-      {/* Gradient overlay for smooth transition */}
-      <div className="absolute inset-0 bg-gradient-to-t from-white via-white/80 to-transparent pointer-events-none" />
-      <div className="max-w-4xl mx-auto pointer-events-auto relative z-10">
+      {!floatingWithinParent && (
+        <>
+          {/* Gradient overlay for smooth transition */}
+          <div className="absolute inset-0 bg-gradient-to-t from-white via-white/80 to-transparent pointer-events-none" />
+        </>
+      )}
+      <div className={`${floatingWithinParent ? 'w-full' : 'max-w-4xl mx-auto'} pointer-events-auto relative z-10`}>
         <div className="relative flex w-full flex-auto flex-col">
           <div className="relative mx-2 sm:mx-3 flex min-h-14 flex-auto items-start">
             <div
-              className="prosemirror-parent text-gray-900 max-h-52 flex-1 overflow-auto rounded-xl bg-white focus-within:ring-2 focus-within:ring-blue-200/50 vertical-scroll-fade-mask relative"
+              className="prosemirror-parent text-gray-900 max-h-52 flex-1 overflow-auto rounded-xl focus-within:ring-2 focus-within:ring-blue-200/50 vertical-scroll-fade-mask relative bg-white border border-gray-200 shadow-sm"
               style={{ scrollbarWidth: 'thin' }}
             >
               <textarea
@@ -99,7 +121,7 @@ export default function ChatInput({
                 ref={contentEditableRef}
                 contentEditable={!isLoading}
                 translate="no"
-                className="ProseMirror p-3 pr-24 min-h-14 max-h-52 overflow-auto focus:outline-none resize-none"
+                className="ProseMirror p-3 pr-32 min-h-14 max-h-52 overflow-auto focus:outline-none resize-none text-gray-900"
                 id="prompt-textarea"
                 data-virtualkeyboard="true"
                 suppressContentEditableWarning={true}
@@ -108,18 +130,13 @@ export default function ChatInput({
                 style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', minHeight: '3.5rem' }}
                 data-placeholder={shouldShowPlaceholder ? placeholder : undefined}
               />
-              {shouldShowPlaceholder && (
-                <div className="absolute top-3 left-3 text-gray-400 pointer-events-none select-none">
-                  {placeholder}
-                </div>
-              )}
               
               {/* Context Filter Menu Button */}
               <button
                 ref={menuButtonRef}
                 onClick={toggleContextMenu}
                 disabled={isLoading}
-                className="absolute right-16 bottom-3 h-8 w-8 rounded-lg transition-all duration-200 flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="absolute right-24 bottom-3 h-8 w-8 rounded-lg transition-all duration-200 flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
                 aria-label="Open context filters"
                 aria-haspopup="menu"
                 aria-expanded={isContextMenuOpen}
@@ -130,6 +147,17 @@ export default function ChatInput({
                 <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
                   <path d="M10 3a1.5 1.5 0 110 3 1.5 1.5 0 010-3zM10 8.5a1.5 1.5 0 110 3 1.5 1.5 0 010-3zM10 14a1.5 1.5 0 110 3 1.5 1.5 0 010-3z" />
                 </svg>
+              </button>
+
+              {/* Expand Text Button */}
+              <button
+                onClick={handleExpandClick}
+                disabled={isLoading}
+                className="absolute right-12 bottom-3 h-8 w-8 rounded-lg transition-all duration-200 flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label="Expand text editor"
+                title="Expand text editor"
+              >
+                <Expand className="w-4 h-4" />
               </button>
 
               {/* Send Button */}
@@ -173,6 +201,8 @@ export default function ChatInput({
           </div>
         </div>
       </div>
+
+
     </div>
   );
 }

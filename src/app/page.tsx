@@ -15,6 +15,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<'chat' | 'profile' | 'admin'>('chat');
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(320);
+  const [sidebarOpen, setSidebarOpen] = useState(true); // Track sidebar open/closed state
   const [userProfile, setUserProfile] = useState<any>(null);
   const [showStateDropdown, setShowStateDropdown] = useState(false);
   const stateDropdownRef = useRef<HTMLDivElement>(null);
@@ -327,6 +328,8 @@ export default function Home() {
           onDeleteChat={deleteChat} // Connect to main app's delete function
           onWidthChange={setSidebarWidth}
           width={sidebarWidth}
+          sidebarOpen={sidebarOpen}
+          onSidebarToggle={setSidebarOpen}
           onModeSwitch={() => setMode('admin')}
           reloadFlag={reloadFlag}
           pendingNewChat={pendingNewChat}
@@ -359,6 +362,7 @@ export default function Home() {
             onGlobalModelChange={handleModelChange}
             isHydrated={isHydrated}
             isAsyncMode={currentSettings.isAsync}
+            sidebarOpen={sidebarOpen}
             // Pass ChatInstance methods for proper state management
             onSendMessage={sendMessage}
             onCancelRequest={cancelRequest}
