@@ -42,13 +42,17 @@ export default function ContextFilters({
   const profileInputRef = useRef<HTMLInputElement>(null);
   const profileDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Effect: filter states for autocomplete
+  // Effect: filter states for autocomplete - only show when user is typing
   useEffect(() => {
-    setFilteredStates(
-      US_STATES.filter(
-        s => s.toLowerCase().includes(stateInput.toLowerCase()) && !domainKnowledge.stateTaxCodes.includes(s)
-      )
-    );
+    if (stateInput.trim()) {
+      setFilteredStates(
+        US_STATES.filter(
+          s => s.toLowerCase().includes(stateInput.toLowerCase()) && !domainKnowledge.stateTaxCodes.includes(s)
+        )
+      );
+    } else {
+      setFilteredStates([]);
+    }
   }, [stateInput, domainKnowledge.stateTaxCodes]);
 
   // Effect: close dropdowns on outside click
@@ -169,7 +173,9 @@ export default function ContextFilters({
               }}
             />
             <div className="max-h-40 overflow-y-auto mb-2">
-              {filteredStates.length === 0 ? (
+              {!stateInput.trim() ? (
+                <div className="text-xs text-gray-400 px-2 py-1">Start typing to search states...</div>
+              ) : filteredStates.length === 0 ? (
                 <div className="text-xs text-gray-400 px-2 py-1">No states found</div>
               ) : (
                 filteredStates.map(state => (

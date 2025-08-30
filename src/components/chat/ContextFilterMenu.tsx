@@ -60,11 +60,15 @@ export default function ContextFilterMenu({
 
   // Filter states for autocomplete
   useEffect(() => {
-    setFilteredStates(
-      US_STATES.filter(
-        s => s.toLowerCase().includes(stateInput.toLowerCase()) && !domainKnowledge.stateTaxCodes.includes(s)
-      )
-    );
+    if (stateInput.trim()) {
+      setFilteredStates(
+        US_STATES.filter(
+          s => s.toLowerCase().includes(stateInput.toLowerCase()) && !domainKnowledge.stateTaxCodes.includes(s)
+        )
+      );
+    } else {
+      setFilteredStates([]);
+    }
   }, [stateInput, domainKnowledge.stateTaxCodes]);
 
   // Close menu on outside click

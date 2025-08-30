@@ -1,14 +1,14 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import ReactDOM from 'react-dom';
 import type { ChatListItem } from '@/types/chat';
-
 import { MoreVertical, ArrowLeft, PencilLine, Settings, Search } from 'lucide-react';
 import ChatSettings, { ChatSettingsRef } from './ChatSettings';
-import { isYesterday, isToday, subDays, isAfter } from 'date-fns';
 import { checkBackendHealth } from '../lib/backendHealth';
 import chatService from '@/lib/api/chatService';
+import ChatSearchPopup from './chat/ChatSearchPopup';
+import ChatList from './chat/ChatList';
+import CollapsedSidebar from './chat/CollapsedSidebar';
 
 interface ChatHistoryProps {
   chats: ChatListItem[];
@@ -51,27 +51,6 @@ interface BackendConversation {
     stateTaxCodes?: string[];
     profileTags?: string[];
   };
-}
-
-//
-
-// Utility to group chats by date
-function groupChatsByDate(chats: ChatListItem[]) {
-  const groups: { [key: string]: ChatListItem[] } = { Today: [], Yesterday: [], 'Previous 7 Days': [], Older: [] };
-  const now = new Date();
-  chats.forEach(chat => {
-    const date = chat.timestamp ? new Date(chat.timestamp) : new Date();
-    if (isToday(date)) {
-      groups['Today'].push(chat);
-    } else if (isYesterday(date)) {
-      groups['Yesterday'].push(chat);
-    } else if (isAfter(date, subDays(now, 7))) {
-      groups['Previous 7 Days'].push(chat);
-    } else {
-      groups['Older'].push(chat);
-    }
-  });
-  return groups;
 }
 
 export default function ChatHistory({ 
@@ -123,7 +102,6 @@ export default function ChatHistory({
   const dragStartX = useRef(0);
   const dragStartWidth = useRef(0);
   const [contextMenu, setContextMenu] = useState<{ show: boolean, x: number, y: number, chatId: string | null }>({ show: false, x: 0, y: 0, chatId: null });
-  const [dropdownMenu, setDropdownMenu] = useState<{ show: boolean, chatId: string | null, anchor: { top: number, left: number } }>({ show: false, chatId: null, anchor: { top: 0, left: 0 } });
   const [sidebarOpenState, setSidebarOpenState] = useState(false); // Start with false to prevent hydration mismatch
   const [hasHydrated, setHasHydrated] = useState(false);
   // Fully hide sidebar on very small screens
@@ -142,26 +120,6 @@ export default function ChatHistory({
   });
   const chatSettingsRef = useRef<ChatSettingsRef>(null);
   const [backendOnline, setBackendOnline] = useState<boolean>(true); // Assume online initially
-
-  // Safe localStorage utility functions
-  // const safeSetItem = (key: string, value: any) => {
-  //   try {
-  //     localStorage.setItem(key, JSON.stringify(value));
-  //   } catch (error) {
-  //     console.error(`Error storing data for key ${key}:`, error);
-  //   }
-  // };
-
-  // const safeGetItem = (key: string) => {
-  //   try {
-  //     const item = localStorage.getItem(key);
-  //     return item ? JSON.parse(item) : null;
-  //   } catch (error) {
-  //     console.error(`Error retrieving data for key ${key}:`, error);
-  //     localStorage.removeItem(key);
-  //     return null;
-  //   }
-  // };
 
   const handleClearAll = () => {
     if (window.confirm('Are you sure you want to clear all conversations? This action cannot be undone.')) {
@@ -336,8 +294,6 @@ export default function ChatHistory({
       console.error('Error creating conversation:', error);
     }
   };
-
-
 
   // When a chat is selected, fetch its details from backend
   const handleChatSelect = async (chat: ChatListItem) => {
@@ -617,12 +573,11 @@ export default function ChatHistory({
 
   useEffect(() => {
     function handleClick() {
-      if (dropdownMenu.show) setDropdownMenu({ show: false, chatId: null, anchor: { top: 0, left: 0 } });
       if (contextMenu.show) setContextMenu({ ...contextMenu, show: false });
     }
     window.addEventListener('click', handleClick);
     return () => window.removeEventListener('click', handleClick);
-  }, [dropdownMenu, contextMenu]);
+  }, [contextMenu]);
 
   // Add a useEffect to collapse sidebar if window.innerWidth < 600
   useEffect(() => {
@@ -690,218 +645,20 @@ export default function ChatHistory({
 
   if (!sidebarOpen) {
     return (
-      <div className="flex h-full">
-        <div className="flex flex-col items-center bg-white border-r border-gray-200 w-14 min-w-[56px] max-w-[56px] z-[99999]">
-          <button
-            className="mt-4 mb-2 p-2 rounded hover:bg-gray-100"
-            onClick={() => onSidebarToggle?.(true)}
-            aria-label="Expand sidebar"
-            title="Expand sidebar"
-          >
-            <ArrowLeft className="w-5 h-5" style={{ transform: 'rotate(180deg)' }} />
-          </button>
-          <button
-            className="my-2 p-2 rounded hover:bg-gray-100"
-            onClick={handleOpenSearch}
-            aria-label="Search chats"
-            title="Search chats"
-          >
-            <Search className="w-5 h-5 text-gray-500" />
-          </button>
-          <button
-            className="my-2 p-2 rounded hover:bg-gray-100"
-            onClick={e => { e.preventDefault(); onStartNewChat?.(); }}
-            aria-label="New chat"
-            title="New chat"
-          >
-            <PencilLine className="w-5 h-5 text-gray-500" />
-          </button>
-          
-          {/* Spacer to push settings to bottom */}
-          <div className="flex-1"></div>
-          
-          {/* Settings Button at bottom */}
-          <button
-            className="mb-4 p-2 rounded hover:bg-gray-100"
-            onClick={handleOpenSettings}
-            aria-label="Model settings"
-            title="Model settings"
-          >
-            <Settings className="w-5 h-5 text-gray-500" />
-          </button>
-        </div>
-        <div className="flex-1 h-full relative">{/* Chat panel will be here, not overlapped */}</div>
-        {/* Search Popup (always render, even if sidebar is collapsed) */}
-        {showSearch && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowSearch(false)}>
-            <div className="flex flex-col max-h-[480px] min-h-[480px] w-[638px] bg-white rounded-xl shadow-xl" onClick={e => e.stopPropagation()}>
-              {/* Input row */}
-              <div className="ms-6 me-4 flex max-h-[64px] min-h-[64px] items-center justify-between">
-                <input
-                  className="placeholder:text-gray-400 w-full border-none bg-transparent focus:border-transparent focus:ring-0 focus:outline-none text-base text-black"
-                  placeholder="Search chats..."
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  autoFocus
-                />
-                <button
-                  className="hover:bg-gray-200 focus-visible:ring-2 focus-visible:ring-gray-300 flex items-center justify-center rounded-full bg-transparent p-1 ms-4"
-                  aria-label="Close"
-                  onClick={() => setShowSearch(false)}
-                >
-                  <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" className="text-gray-500 hover:text-black">
-                    <path d="M14.2548 4.75488C14.5282 4.48152 14.9717 4.48152 15.2451 4.75488C15.5184 5.02825 15.5184 5.47175 15.2451 5.74512L10.9902 10L15.2451 14.2549L15.3349 14.3652C15.514 14.6369 15.4841 15.006 15.2451 15.2451C15.006 15.4842 14.6368 15.5141 14.3652 15.335L14.2548 15.2451L9.99995 10.9902L5.74506 15.2451C5.4717 15.5185 5.0282 15.5185 4.75483 15.2451C4.48146 14.9718 4.48146 14.5282 4.75483 14.2549L9.00971 10L4.75483 5.74512L4.66499 5.63477C4.48589 5.3631 4.51575 4.99396 4.75483 4.75488C4.99391 4.51581 5.36305 4.48594 5.63471 4.66504L5.74506 4.75488L9.99995 9.00977L14.2548 4.75488Z"></path>
-                  </svg>
-                </button>
-              </div>
-              <hr className="border-gray-300" />
-              {/* Chat results */}
-              <div className="my-2 grow overflow-y-auto">
-                <ol className="mx-2">
-                  {/* Add new chat as first item */}
-                  <li>
-                    <div
-                      className={`cursor-pointer group relative flex items-center rounded-xl px-4 py-3 hover:bg-gray-100 focus:bg-gray-100 ${
-                        deletingChatId ? 'opacity-50 cursor-not-allowed' : ''
-                      }`}
-                      tabIndex={0}
-                      onClick={() => { 
-                        // Prevent creating new chat if there are pending deletions
-                        if (deletingChatId) {
-                          return;
-                        }
-                        onStartNewChat?.(); 
-                        setShowSearch(false); 
-                      }}
-                      onKeyDown={e => { 
-                        if (e.key === 'Enter' || e.key === ' ') { 
-                          // Prevent creating new chat if there are pending deletions
-                          if (deletingChatId) {
-                            return;
-                          }
-                          onStartNewChat?.(); 
-                          setShowSearch(false); 
-                        } 
-                      }}
-                    >
-                      <PencilLine className="w-5 h-5 text-gray-500" />
-                      <div className="relative grow overflow-hidden whitespace-nowrap ps-2">
-                        <div className="text-sm font-medium text-black">
-                          New chat
-                          {deletingChatId && (
-                            <span className="ml-2 text-xs text-gray-400">(deletion in progress)</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </li>
-                  {/* Grouped chat results */}
-                  {(() => {
-                    const groups = groupChatsByDate(filteredChats);
-                    const order = ['Today', 'Yesterday', 'Previous 7 Days', 'Older'];
-                    return order.flatMap(group => (
-                      groups[group].length > 0 ? [
-                        <li key={group + '-header'}>
-                          <div className="group text-gray-400 relative my-2 px-4 pt-2 text-xs leading-4">{group}</div>
-                        </li>,
-                        ...groups[group].map(chat => (
-                          <li key={chat.id}>
-                            <div
-                              className={`cursor-pointer group relative flex items-center rounded-xl px-4 py-3 hover:bg-gray-100 focus:bg-gray-100 ${
-                                deletingChatId === chat.id ? 'opacity-50 cursor-not-allowed' : ''
-                              }`}
-                              tabIndex={0}
-                              onClick={() => { 
-                                // Prevent selection if chat is being deleted
-                                if (deletingChatId === chat.id) {
-                                  return;
-                                }
-                                handleChatSelect(chat); 
-                                setShowSearch(false); 
-                                setSearchQuery(''); 
-                              }}
-                              onKeyDown={e => { 
-                                if (e.key === 'Enter' || e.key === ' ') { 
-                                  // Prevent selection if chat is being deleted
-                                  if (deletingChatId === chat.id) {
-                                    return;
-                                  }
-                                  handleChatSelect(chat); 
-                                  setShowSearch(false); 
-                                  setSearchQuery(''); 
-                                } 
-                              }}
-                            >
-                              {/* Removed chat icon */}
-                              <div className="relative grow overflow-hidden whitespace-nowrap ps-2">
-                                <div className="text-sm truncate">
-                                  {chat.title}
-                                  {deletingChatId === chat.id && (
-                                    <span className="ml-2 text-xs text-gray-400">(deleting...)</span>
-                                  )}
-                                </div>
-                                {chat.lastMessage && (
-                                  <div className="text-xs text-gray-500 truncate">{chat.lastMessage}</div>
-                                )}
-                              </div>
-                            </div>
-                          </li>
-                        ))
-                      ] : []
-                    ));
-                  })()}
-                  {filteredChats.length === 0 && (
-                    <li><div className="p-4 text-center text-gray-400 text-sm">No chats found</div></li>
-                  )}
-                </ol>
-              </div>
-            </div>
-          </div>
-        )}
-        
-        {/* Model Settings Popup (always render, even if sidebar is collapsed) */}
-        {showSettingsPopup && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={handleCloseSettings}>
-            <div 
-              className="flex flex-col max-h-[480px] min-h-[480px] w-[638px] bg-white rounded-xl shadow-xl" 
-              style={sidebarOpen ? { marginLeft: 245 } : {}} // Offset if sidebar is open
-              onClick={e => e.stopPropagation()}
-            >
-              {/* Content */}
-              <div className="flex-1 p-6">
-                <ChatSettings
-                  ref={chatSettingsRef}
-                  selectedModelType={selectedModelType}
-                  selectedModel={selectedModel}
-                  isAsyncMode={isAsyncMode}
-                  onModelChange={onModelChange || (() => {})}
-                  onModeChange={onModeChange || (() => {})}
-                  onClose={handleCloseSettings}
-                  onSave={handleSaveSettings}
-                  onCancel={handleCloseSettings}
-                  availableModels={availableModels}
-                />
-              </div>
-              
-              {/* Footer */}
-              <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200">
-                <button
-                  onClick={handleCloseSettings}
-                  className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSaveSettings}
-                  className="px-4 py-2 text-sm bg-gray-800 text-white hover:bg-gray-700 rounded-lg transition-colors"
-                >
-                  Save
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+      <CollapsedSidebar
+        chats={chats}
+        searchQuery={searchQuery}
+        filteredChats={filteredChats}
+        deletingChatId={deletingChatId}
+        showSearch={showSearch}
+        onSidebarToggle={onSidebarToggle || (() => {})}
+        onOpenSearch={handleOpenSearch}
+        onStartNewChat={onStartNewChat || createNewChat}
+        onOpenSettings={handleOpenSettings}
+        onSearchChange={setSearchQuery}
+        onCloseSearch={() => setShowSearch(false)}
+        onChatSelect={handleChatSelect}
+      />
     );
   }
 
@@ -987,145 +744,26 @@ export default function ChatHistory({
             <nav className="flex-1">
               {isLoading ? (
                 <div className="p-4 text-center text-gray-500">Loading chats...</div>
-              ) : chats.length === 0 ? (
-                <div className="p-4 text-center text-gray-400 text-sm">
-                  {loadAllChats ? (
-                    <div>
-                      <div className="mb-2">No chats found</div>
-                      <button
-                        onClick={() => loadAllChats()}
-                        className="px-3 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-                      >
-                        Load Chats
-                      </button>
-                    </div>
-                  ) : (
-                    "No chats found"
-                  )}
-                </div>
               ) : (
-                <ul className="space-y-1">
-                  {chats.map((chat) => (
-                    <li
-                      key={chat.id}
-                      className={`group flex items-center gap-2 px-2 py-2 rounded-lg cursor-pointer transition-colors ${
-                        selectedChatId === chat.id ? 'bg-gray-200 border-l-4 border-gray-700' : 'hover:bg-gray-100'
-                      } ${
-                        deletingChatId === chat.id ? 'opacity-50 cursor-not-allowed' : ''
-                      }`}
-                      onClick={() => {
-                        // Prevent selection if chat is being deleted
-                        if (deletingChatId === chat.id) {
-                          return;
-                        }
-                        handleChatSelect(chat);
-                      }}
-                      onContextMenu={(e) => {
-                        // Prevent context menu if chat is being deleted
-                        if (deletingChatId === chat.id) {
-                          e.preventDefault();
-                          return;
-                        }
-                        handleContextMenu(e, chat.id);
-                      }}
-                    >
-                       {/* Removed chat icon */}
-                      <div className="flex-1 min-w-0">
-                        {/* Inline rename input or title */}
-                        {renamingChatId === chat.id ? (
-                          <input
-                            className="truncate font-normal text-xs text-gray-900 bg-gray-50 border border-gray-300 rounded px-2 py-1 w-full focus:outline-none focus:ring-2 focus:ring-gray-300"
-                            value={renameInput}
-                            autoFocus
-                            onChange={e => setRenameInput(e.target.value)}
-                            onBlur={() => handleRenameSave(chat.id)}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') handleRenameSave(chat.id);
-                              if (e.key === 'Escape') { setRenamingChatId(null); setRenameInput(''); }
-                            }}
-                            maxLength={60}
-                          />
-                        ) : (
-                          <div className="truncate font-normal text-xs text-gray-900">
-                            {chat.title}
-                            {deletingChatId === chat.id && (
-                              <span className="ml-2 text-xs text-gray-400">(deleting...)</span>
-                            )}
-                          </div>
-                        )}
-                        {chat.lastMessage && (
-                          <div className="truncate text-xs text-gray-500">{chat.lastMessage}</div>
-                        )}
-                      </div>
-                      <div className="relative">
-                        <button
-                          className={`p-1 rounded-full hover:bg-gray-200 transition-opacity ${
-                            deletingChatId === chat.id ? 'opacity-50 cursor-not-allowed' : ''
-                          }`}
-                          disabled={deletingChatId === chat.id}
-                          ref={el => {
-                            if (el && dropdownMenu.show && dropdownMenu.chatId === chat.id) {
-                              const rect = el.getBoundingClientRect();
-                              if (dropdownMenu.anchor.top !== rect.bottom || dropdownMenu.anchor.left !== rect.right) {
-                                setDropdownMenu(dm => ({ ...dm, anchor: { top: rect.bottom, left: rect.right } }));
-                              }
-                            }
-                          }}
-                          onClick={(e) => {
-                            // Prevent dropdown if chat is being deleted
-                            if (deletingChatId === chat.id) {
-                              e.stopPropagation();
-                              return;
-                            }
-                            e.stopPropagation();
-                            setDropdownMenu({
-                              show: !dropdownMenu.show || dropdownMenu.chatId !== chat.id,
-                              chatId: dropdownMenu.show && dropdownMenu.chatId === chat.id ? null : chat.id,
-                              anchor: { top: e.currentTarget.getBoundingClientRect().bottom, left: e.currentTarget.getBoundingClientRect().right }
-                            });
-                          }}
-                        >
-                          <MoreVertical className="w-4 h-4 text-gray-400" />
-                        </button>
-                        {/* Dropdown menu for chat options */}
-                        {dropdownMenu.show && dropdownMenu.chatId === chat.id && isClient && ReactDOM.createPortal(
-                          <div
-                            className="fixed z-[200000] bg-white rounded shadow-lg w-32 py-1 flex flex-col justify-center items-center"
-                            style={{ top: dropdownMenu.anchor.top, left: dropdownMenu.anchor.left, minWidth: '7.5rem', boxShadow: '0 4px 16px 0 rgba(0,0,0,0.10)' }}
-                          >
-                            <button
-                              onClick={() => {
-                                // Prevent rename if chat is being deleted
-                                if (deletingChatId === chat.id) {
-                                  return;
-                                }
-                                setRenamingChatId(chat.id);
-                                setRenameInput(chat.title);
-                                setDropdownMenu({ show: false, chatId: null, anchor: { top: 0, left: 0 } });
-                              }}
-                              className={`block w-11/12 mx-auto mb-1 px-2 py-1 text-center text-[13px] font-medium text-gray-800 hover:bg-gray-100 focus:bg-gray-100 transition rounded ${
-                                deletingChatId === chat.id ? 'opacity-50 cursor-not-allowed' : ''
-                              }`}
-                              style={{ minHeight: '32px' }}
-                              disabled={deletingChatId === chat.id}
-                            >
-                              {deletingChatId === chat.id ? 'Renaming...' : 'Rename'}
-                            </button>
-                            <button
-                              onClick={() => { handleDeleteChat(chat.id); setDropdownMenu({ show: false, chatId: null, anchor: { top: 0, left: 0 } }); }}
-                              className="block w-11/12 mx-auto px-2 py-1 text-center text-[13px] font-medium text-red-600 hover:bg-gray-100 focus:bg-gray-100 transition rounded disabled:opacity-60"
-                              style={{ minHeight: '32px' }}
-                              disabled={deletingChatId === chat.id}
-                            >
-                              {deletingChatId === chat.id ? 'Deleting...' : 'Delete'}
-                            </button>
-                          </div>,
-                          window.document.body
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                <ChatList
+                  chats={chats}
+                  selectedChatId={selectedChatId}
+                  deletingChatId={deletingChatId}
+                  renamingChatId={renamingChatId}
+                  renameInput={renameInput}
+                  onChatSelect={handleChatSelect}
+                  onRenameStart={(chatId, title) => {
+                    setRenamingChatId(chatId);
+                    setRenameInput(title);
+                  }}
+                  onRenameChange={setRenameInput}
+                  onRenameSave={handleRenameSave}
+                  onRenameCancel={() => {
+                    setRenamingChatId(null);
+                    setRenameInput('');
+                  }}
+                  onDeleteChat={handleDeleteChat}
+                />
               )}
             </nav>
           </div>
@@ -1169,8 +807,6 @@ export default function ChatHistory({
             </button>
           </div>
         )}
-
-
               </aside>
 
         {/* Overlay when sidebar is open on small screens */}
@@ -1209,91 +845,16 @@ export default function ChatHistory({
       )}
       
       {/* Search Popup (always render, even if sidebar is expanded) */}
-      {showSearch && (
-        <div
-          className={`fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center`}
-          onClick={() => setShowSearch(false)}
-        >
-          <div
-            className={`flex flex-col max-h-[480px] min-h-[480px] w-[638px] bg-white rounded-xl shadow-xl`}
-            style={sidebarOpen ? { marginLeft: 245 } : {}} // Offset if sidebar is open
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Input row */}
-            <div className="ms-6 me-4 flex max-h-[64px] min-h-[64px] items-center justify-between">
-              <input
-                className="placeholder:text-gray-400 w-full border-none bg-transparent focus:border-transparent focus:ring-0 focus:outline-none text-base text-black"
-                placeholder="Search chats..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                autoFocus
-              />
-              <button
-                className="hover:bg-gray-200 focus-visible:ring-2 focus-visible:ring-gray-300 flex items-center justify-center rounded-full bg-transparent p-1 ms-4"
-                aria-label="Close"
-                onClick={() => setShowSearch(false)}
-              >
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" className="text-gray-500 hover:text-black">
-                  <path d="M14.2548 4.75488C14.5282 4.48152 14.9717 4.48152 15.2451 4.75488C15.5184 5.02825 15.5184 5.47175 15.2451 5.74512L10.9902 10L15.2451 14.2549L15.3349 14.3652C15.514 14.6369 15.4841 15.006 15.2451 15.2451C15.006 15.4842 14.6368 15.5141 14.3652 15.335L14.2548 15.2451L9.99995 10.9902L5.74506 15.2451C5.4717 15.5185 5.0282 15.5185 4.75483 15.2451C4.48146 14.9718 4.48146 14.5282 4.75483 14.2549L9.00971 10L4.75483 5.74512L4.66499 5.63477C4.48589 5.3631 4.51575 4.99396 4.75483 4.75488C4.99391 4.51581 5.36305 4.48594 5.63471 4.66504L5.74506 4.75488L9.99995 9.00977L14.2548 4.75488Z"></path>
-                </svg>
-              </button>
-            </div>
-            <hr className="border-gray-300" />
-            {/* Chat results */}
-            <div className="my-2 grow overflow-y-auto">
-              <ol className="mx-2">
-                {/* Add new chat as first item */}
-                <li>
-                  <div
-                    className="cursor-pointer group relative flex items-center rounded-xl px-4 py-3 hover:bg-gray-100 focus:bg-gray-100"
-                    tabIndex={0}
-                    onClick={() => { createNewChat(); setShowSearch(false); }}
-                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { createNewChat(); setShowSearch(false); } }}
-                  >
-                    <PencilLine className="w-5 h-5 text-gray-500" />
-                    <div className="relative grow overflow-hidden whitespace-nowrap ps-2">
-                      <div className="text-sm font-medium text-black">New chat</div>
-                    </div>
-                  </div>
-                </li>
-                {/* Grouped chat results */}
-                {(() => {
-                  const groups = groupChatsByDate(filteredChats);
-                  const order = ['Today', 'Yesterday', 'Previous 7 Days', 'Older'];
-                  return order.flatMap(group => (
-                    groups[group].length > 0 ? [
-                      <li key={group + '-header'}>
-                        <div className="group text-gray-400 relative my-2 px-4 pt-2 text-xs leading-4">{group}</div>
-                      </li>,
-                      ...groups[group].map(chat => (
-                        <li key={chat.id}>
-                          <div
-                            className="cursor-pointer group relative flex items-center rounded-xl px-4 py-3 hover:bg-gray-100 focus:bg-gray-100"
-                            tabIndex={0}
-                            onClick={() => { onStartNewChat?.(); setShowSearch(false); }}
-                            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { onStartNewChat?.(); setShowSearch(false); } }}
-                          >
-                             {/* Removed chat icon */}
-                            <div className="relative grow overflow-hidden whitespace-nowrap ps-2">
-                              <div className="text-sm truncate text-black">{chat.title}</div>
-                              {chat.lastMessage && (
-                                <div className="text-xs text-gray-500 truncate">{chat.lastMessage}</div>
-                              )}
-                            </div>
-                          </div>
-                        </li>
-                      ))
-                    ] : []
-                  ));
-                })()}
-                {filteredChats.length === 0 && (
-                  <li><div className="p-4 text-center text-gray-400 text-sm">No chats found</div></li>
-                )}
-              </ol>
-            </div>
-          </div>
-        </div>
-      )}
+      <ChatSearchPopup
+        isOpen={showSearch}
+        searchQuery={searchQuery}
+        filteredChats={filteredChats}
+        deletingChatId={deletingChatId}
+        onClose={() => setShowSearch(false)}
+        onSearchChange={setSearchQuery}
+        onStartNewChat={onStartNewChat || createNewChat}
+        onChatSelect={handleChatSelect}
+      />
     </>
   );
 } 
