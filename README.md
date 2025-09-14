@@ -2,6 +2,8 @@
 
 A comprehensive tax document chatbot that combines local and cloud AI models for intelligent tax assistance.
 
+![LucaTaxGPT Design](taxgpt-design.png)
+
 ## 🚀 Quick Start
 
 ### Prerequisites

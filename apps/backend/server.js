@@ -469,6 +469,7 @@ app.use((req, res, next) => {
 
 // Import routes
 const chatRoutes = require('./routes/chat');
+const agentRoutes = require('./routes/agents');
 const { loadChatsFromFile } = require('./models/Chat');
 const { initializeServices, cleanup } = require('./services/aiService');
 
@@ -489,6 +490,7 @@ module.exports.getStreamingWorker = getStreamingWorker;
 
 // Set up routes
 app.use('/api/chat', chatRoutes);
+app.use('/api/agents', agentRoutes);
 
 // Health check endpoint
 app.get('/api/health', async (req, res) => {
